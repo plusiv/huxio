@@ -1,0 +1,78 @@
+{{define "tail"}}{{template "layout" .}}{{end}}
+
+{{define "content"}}
+<h1>Live tail</h1>
+<p class="hint">Deliveries appear here as they happen. Leave this open while you test.</p>
+
+<div class="panel">
+  <div class="row" style="margin-top:0">
+    <span id="status" class="badge warn">connecting…</span>
+    <button id="clear" class="secondary" type="button">Clear</button>
+  </div>
+  <table id="tail">
+    <thead><tr><th>When</th><th>Event</th><th>Status</th><th>Response</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <div class="empty" id="waiting">Waiting for the next delivery…</div>
+</div>
+
+<script>
+// EventSource is built into the browser, so the one dynamic surface in the
+// portal needs no framework and no bundle.
+(function () {
+  var body = document.querySelector('#tail tbody');
+  var status = document.getElementById('status');
+  var waiting = document.getElementById('waiting');
+
+  document.getElementById('clear').addEventListener('click', function () {
+    body.innerHTML = '';
+    waiting.hidden = false;
+  });
+
+  var stream = new EventSource('/portal/stream');
+
+  stream.onopen = function () {
+    status.textContent = 'live';
+    status.className = 'badge ok';
+  };
+  stream.onerror = function () {
+    status.textContent = 'reconnecting…';
+    status.className = 'badge warn';
+  };
+
+  stream.addEventListener('attempt', function (event) {
+    var attempt;
+    try { attempt = JSON.parse(event.data); } catch (e) { return; }
+
+    var badge = attempt.status === 0 ? 'ok' : (attempt.status === 1 ? 'warn' : 'bad');
+    var row = document.createElement('tr');
+
+    var when = document.createElement('td');
+    when.className = 'mono';
+    when.textContent = new Date(attempt.timestamp).toLocaleTimeString();
+
+    var msg = document.createElement('td');
+    msg.className = 'mono';
+    msg.textContent = attempt.msgId;
+
+    var state = document.createElement('td');
+    var pill = document.createElement('span');
+    pill.className = 'badge ' + badge;
+    pill.textContent = attempt.statusText;
+    state.appendChild(pill);
+
+    var response = document.createElement('td');
+    response.textContent = (attempt.responseStatusCode || 'no response') + ' · ' +
+      attempt.responseDurationMs + 'ms';
+
+    row.append(when, msg, state, response);
+    body.prepend(row);
+    waiting.hidden = true;
+
+    while (body.childElementCount > 200) {
+      body.removeChild(body.lastElementChild);
+    }
+  });
+})();
+</script>
+{{end}}

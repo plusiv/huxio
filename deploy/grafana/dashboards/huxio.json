@@ -1,0 +1,300 @@
+{
+  "uid": "huxio-delivery",
+  "title": "huxio — delivery",
+  "description": "Panels are ordered the way an incident is diagnosed: is the queue keeping up, whose tail is bad, and what is the delivery path doing.",
+  "tags": ["huxio"],
+  "timezone": "browser",
+  "editable": true,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "org",
+        "label": "Organization",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "query": "label_values(huxio_deliveries_total, org)",
+        "includeAll": true,
+        "multi": true,
+        "refresh": 2
+      },
+      {
+        "name": "pool",
+        "label": "Pool",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+        "query": "label_values(huxio_queue_lag_seconds, pool)",
+        "includeAll": true,
+        "multi": true,
+        "refresh": 2
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "Is the queue keeping up",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Queue lag (SLO: p99 < 1s)",
+      "description": "Age of the oldest ready task. This is the worker autoscaling signal and the first SLO to break.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "huxio_queue_lag_seconds{pool=~\"$pool\"}",
+          "legendFormat": "{{pool}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Queue depth by state",
+      "description": "Ready, delayed and locked. Depth flat while claim latency rises is bloat, not load.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 1 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum by (state) (huxio_queue_depth{pool=~\"$pool\"})",
+          "legendFormat": "{{state}}"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Whose tail is bad",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Worst-tenant internal delivery p99 (SLO: < 50ms)",
+      "description": "Claim to bytes on the wire, excluding the endpoint's own response time. Alert on the worst tenant, never the global aggregate: a global p99 hides exactly the failure this system exists to avoid.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 10 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 0.05 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "max by (org) (histogram_quantile(0.99, sum by (org, le) (rate(huxio_delivery_internal_seconds_bucket[5m]))))",
+          "legendFormat": "{{org}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Ingest p99 by tenant (SLO: < 25ms)",
+      "description": "POST /msg duration. The sender's experience, which must never include delivery latency.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 10 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 0.025 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "histogram_quantile(0.99, sum by (org, le) (rate(huxio_ingest_duration_seconds_bucket{org=~\"$org\"}[5m])))",
+          "legendFormat": "{{org}}"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "What the delivery path is doing",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Deliveries by outcome",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 19 },
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum by (outcome) (rate(huxio_deliveries_total{org=~\"$org\"}[1m]))",
+          "legendFormat": "{{outcome}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Deliveries by status class",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 19 },
+      "fieldConfig": { "defaults": { "unit": "reqps" } },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum by (status_class) (rate(huxio_deliveries_total{org=~\"$org\"}[1m]))",
+          "legendFormat": "{{status_class}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Circuit breakers",
+      "description": "Endpoints whose breaker is open are not being dialled at all, which is where the CPU saving is at scale.",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 19 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum by (state) (huxio_breaker_state)",
+          "legendFormat": "{{state}}"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum(huxio_endpoints_quarantined)",
+          "legendFormat": "quarantined"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Attempt writer queue depth",
+      "description": "Sustained above zero means Postgres is the bottleneck. This is the primary saturation signal.",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 27 },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum(huxio_attempt_writer_queue_depth)",
+          "legendFormat": "buffered records"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Attempt batch size",
+      "description": "Records per COPY. Small batches mean the batching win is not being realised.",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 27 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "histogram_quantile(0.5, sum by (le) (rate(huxio_attempt_writer_batch_size_bucket[5m])))",
+          "legendFormat": "p50"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(huxio_attempt_writer_batch_size_bucket[5m])))",
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Connection reuse and DNS cache",
+      "description": "The ratio of cold to warm connections is the metric to watch: a cold connection costs a handshake.",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 27 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "avg(huxio_http_conn_reused_ratio)",
+          "legendFormat": "connection reuse"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum(rate(huxio_dns_cache_hits_total[5m])) / clamp_min(sum(rate(huxio_dns_cache_hits_total[5m])) + sum(rate(huxio_dns_cache_misses_total[5m])), 0.001)",
+          "legendFormat": "dns cache hit rate"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Fleet",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 35 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Partition leases owned",
+      "description": "Should sum to the partition count per pool. A sum below it means partitions nobody is working.",
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 36 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "huxio_partition_leases_owned",
+          "legendFormat": "{{instance}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Lanes in flight",
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 36 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "sum(huxio_lane_inflight_total)",
+          "legendFormat": "in flight"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Config snapshot age (alert above 300s)",
+      "description": "Above five minutes means LISTEN died and config changes are not propagating.",
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 36 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 300 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+          "expr": "max(huxio_config_snapshot_age_seconds)",
+          "legendFormat": "snapshot age"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "version": 1
+}

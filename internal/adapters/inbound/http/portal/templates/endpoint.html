@@ -1,0 +1,134 @@
+{{define "endpoint"}}{{template "layout" .}}{{end}}
+
+{{define "content"}}
+{{$ep := .Data.Endpoint}}
+<h1 class="mono">{{$ep.URL}}</h1>
+<p class="hint">
+  {{if $ep.Disabled}}<span class="badge bad">disabled</span> This endpoint was switched off after sustained failures. Fix it, then enable it again.
+  {{else}}<span class="badge ok">active</span>{{end}}
+</p>
+
+<div class="panel stats">
+  <div><strong>{{.Data.Stats.Succeeded}}</strong><span>delivered</span></div>
+  <div><strong>{{.Data.Stats.Pending}}</strong><span>pending retry</span></div>
+  <div><strong>{{.Data.Stats.Failed}}</strong><span>failed</span></div>
+</div>
+
+<h2>Settings</h2>
+<form class="panel" method="post" action="/portal/endpoints/{{$ep.ID}}">
+  <label for="url">Endpoint URL</label>
+  <input id="url" name="url" type="url" required value="{{$ep.URL}}">
+
+  <label for="description">Description</label>
+  <input id="description" name="description" type="text" value="{{$ep.Description}}">
+
+  <label for="eventTypes">Event types</label>
+  {{if .Data.EventTypes}}
+  <select id="eventTypes" name="eventTypes" multiple size="{{.Data.EventTypeRows}}">
+    {{range .Data.EventTypes}}
+    <option value="{{.Name}}" {{if .Selected}}selected{{end}}>{{.Name}}</option>
+    {{end}}
+  </select>
+  <p class="hint">Select none to receive every event type.</p>
+  {{else}}
+  <input id="eventTypes" name="eventTypes" type="text" value="{{.Data.EventTypesCSV}}">
+  {{end}}
+
+  <div class="row">
+    <button type="submit">Save</button>
+    {{if $ep.Disabled}}
+    <button type="submit" name="action" value="enable" class="secondary">Enable endpoint</button>
+    {{else}}
+    <button type="submit" name="action" value="disable" class="secondary">Disable endpoint</button>
+    {{end}}
+  </div>
+</form>
+
+<h2>Signing secret</h2>
+<div class="panel">
+  <p class="hint">Verify every request against this secret. The header format is Standard Webhooks.</p>
+  {{if .Data.Secret}}
+  <pre class="mono">{{.Data.Secret}}</pre>
+  {{else}}
+  <form method="post" action="/portal/endpoints/{{$ep.ID}}/secret">
+    <button type="submit" name="action" value="reveal" class="secondary">Reveal secret</button>
+  </form>
+  {{end}}
+  <form method="post" action="/portal/endpoints/{{$ep.ID}}/secret" class="row">
+    <button type="submit" name="action" value="rotate" class="secondary">Rotate secret</button>
+    <span class="muted">The old secret keeps signing for 24 hours, so you can roll over without downtime.</span>
+  </form>
+</div>
+
+<h2>Send a test event</h2>
+<form class="panel" method="post" action="/portal/endpoints/{{$ep.ID}}/test">
+  <label for="eventType">Event type</label>
+  {{if .Data.EventTypes}}
+  <select id="eventType" name="eventType">
+    {{range .Data.EventTypes}}<option value="{{.Name}}">{{.Name}}</option>{{end}}
+  </select>
+  {{else}}
+  <input id="eventType" name="eventType" type="text" value="test.event">
+  {{end}}
+
+  <label for="payload">Payload</label>
+  <textarea id="payload" name="payload">{{.Data.SamplePayload}}</textarea>
+
+  <div class="row"><button type="submit">Send test event</button></div>
+</form>
+
+<h2>Recent deliveries</h2>
+{{template "attempts" .}}
+
+<div class="row">
+  <form method="post" action="/portal/endpoints/{{$ep.ID}}/recover">
+    <input type="hidden" name="hours" value="24">
+    <button type="submit" class="secondary">Replay deliveries that failed for good in the last 24 hours</button>
+  </form>
+  <form method="post" action="/portal/endpoints/{{$ep.ID}}/delete"
+        onsubmit="return confirm('Delete this endpoint? Deliveries to it stop immediately.')">
+    <button type="submit" class="danger">Delete endpoint</button>
+  </form>
+</div>
+{{end}}
+
+{{define "attempts"}}
+<div class="panel">
+  {{if .Data.Attempts}}
+  <table>
+    <thead>
+      <tr><th>When</th><th>Event</th><th>Status</th><th>Response</th><th></th></tr>
+    </thead>
+    <tbody>
+      {{range .Data.Attempts}}
+      <tr>
+        <td class="mono">{{.When}}</td>
+        <td class="mono">{{.MsgID}}</td>
+        <td>
+          <span class="badge {{.StatusClass}}">{{.StatusText}}</span>
+          {{if gt .Attempt 1}}<span class="muted">attempt {{.Attempt}}</span>{{end}}
+        </td>
+        <td class="stack">
+          <span>{{if .ResponseCode}}{{.ResponseCode}}{{else}}no response{{end}} · {{.DurationMS}}ms</span>
+          {{if .Response}}<span class="muted mono">{{.Response}}</span>{{end}}
+        </td>
+        <td>
+          <form method="post" action="/portal/endpoints/{{$.Data.Endpoint.ID}}/resend">
+            <input type="hidden" name="msgId" value="{{.MsgID}}">
+            <button type="submit" class="secondary">Resend</button>
+          </form>
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{if .Data.NextCursor}}
+  <div class="row">
+    <a class="button secondary" href="{{.Data.NextPageURL}}">Older deliveries</a>
+  </div>
+  {{end}}
+  {{else}}
+  <div class="empty">No deliveries yet.</div>
+  {{end}}
+</div>
+{{end}}

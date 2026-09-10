@@ -1,0 +1,71 @@
+# Build output
+/bin/
+/out/
+/dist/
+/openapi.json
+huxio
+
+# Test and coverage artefacts
+coverage.out
+coverage.html
+*.test
+*.out
+!go.sum
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Benchmark runs are machine-specific; bench/baselines is committed.
+/bench/results/*.json
+
+# Agent and design notes, kept local
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+IMPLEMENTATION_PLAN.md
+/docs/
+/.claude/
+/.cursor/
+/.aider*
+/.windsurf/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+Icon?
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+.directory
+.Trash-*
+
+# Editors and IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*.sublime-workspace
+*~
+\#*\#
+.\#*
+
+# Go tooling
+vendor/
+go.work
+go.work.sum
+*.prof
+*.pprof
+__debug_bin*

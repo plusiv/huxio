@@ -1,0 +1,58 @@
+{{define "endpoints"}}{{template "layout" .}}{{end}}
+
+{{define "content"}}
+<h1>Endpoints</h1>
+<p class="hint">Every endpoint receives a signed POST for the event types it subscribes to.</p>
+
+{{if .Data.Endpoints}}
+<div class="panel">
+  <table>
+    <thead>
+      <tr><th>URL</th><th>Event types</th><th>Status</th><th></th></tr>
+    </thead>
+    <tbody>
+      {{range .Data.Endpoints}}
+      <tr>
+        <td class="stack">
+          <span class="mono">{{.URL}}</span>
+          {{if .Description}}<span class="muted">{{.Description}}</span>{{end}}
+        </td>
+        <td>
+          {{if .EventTypes}}{{range .EventTypes}}<code>{{.}}</code> {{end}}
+          {{else}}<span class="muted">all events</span>{{end}}
+        </td>
+        <td>
+          {{if .Disabled}}<span class="badge bad">disabled</span>
+          {{else}}<span class="badge ok">active</span>{{end}}
+        </td>
+        <td><a class="button secondary" href="/portal/endpoints/{{.ID}}">Manage</a></td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{else}}
+<div class="panel"><div class="empty">No endpoints yet. Add one below.</div></div>
+{{end}}
+
+<h2>Add an endpoint</h2>
+<form class="panel" method="post" action="/portal/endpoints">
+  <label for="url">Endpoint URL</label>
+  <input id="url" name="url" type="url" required placeholder="https://example.com/webhooks">
+
+  <label for="description">Description</label>
+  <input id="description" name="description" type="text" placeholder="Optional, for your own reference">
+
+  <label for="eventTypes">Event types</label>
+  {{if .Data.EventTypes}}
+  <select id="eventTypes" name="eventTypes" multiple size="{{.Data.EventTypeRows}}">
+    {{range .Data.EventTypes}}<option value="{{.Name}}">{{.Name}}{{if .Description}} — {{.Description}}{{end}}</option>{{end}}
+  </select>
+  <p class="hint">Select none to receive every event type.</p>
+  {{else}}
+  <input id="eventTypes" name="eventTypes" type="text" placeholder="invoice.paid, invoice.void (blank for all)">
+  {{end}}
+
+  <div class="row"><button type="submit">Add endpoint</button></div>
+</form>
+{{end}}

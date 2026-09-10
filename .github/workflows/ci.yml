@@ -1,0 +1,81 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+      - name: Verify formatting
+        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - name: Vet
+        run: go vet ./...
+      - name: Unit tests (race)
+        run: go test -race $(go list ./... | grep -v '/tests/integrations')
+      - name: Integration tests (race)
+        run: go test -race -count=1 ./tests/integrations/...
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+
+  bench-gate:
+    # Throughput and isolation run on every merge to main and fail on a >15%
+    # regression. Isolation is the product claim, so a failure blocks the
+    # merge rather than just reporting.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: bench
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      HUXIO_DATABASE_URL: postgres://postgres:postgres@localhost:5432/bench?sslmode=disable
+      HUXIO_JWT_SECRET: ci
+      HUXIO_LOG_LEVEL: warn
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+      - name: Generate an encryption key
+        run: echo "HUXIO_ENCRYPTION_KEY=$(go run ./cmd/huxio keygen)" >> "$GITHUB_ENV"
+      - name: Throughput scenario
+        run: |
+          baseline=bench/baselines/throughput.json
+          if [ -f "$baseline" ]; then
+            go run ./cmd/huxio bench --scenario=throughput --duration=30s --baseline="$baseline"
+          else
+            go run ./cmd/huxio bench --scenario=throughput --duration=30s
+          fi
+      - name: Isolation scenario
+        run: go run ./cmd/huxio bench --scenario=isolation --duration=40s
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-results
+          path: bench/results/

@@ -1,0 +1,26 @@
+{{define "log"}}{{template "layout" .}}{{end}}
+
+{{define "content"}}
+<h1>Delivery log</h1>
+<p class="hint">Every attempt made to your endpoints, newest first.</p>
+
+<form class="panel" method="get" action="/portal/log">
+  <div class="row">
+    <select name="endpointId">
+      <option value="">All endpoints</option>
+      {{range .Data.Endpoints}}
+      <option value="{{.ID}}" {{if .Selected}}selected{{end}}>{{.URL}}</option>
+      {{end}}
+    </select>
+    <select name="status">
+      <option value="">Any status</option>
+      <option value="success" {{if eq .Data.Status "success"}}selected{{end}}>Delivered</option>
+      <option value="pending" {{if eq .Data.Status "pending"}}selected{{end}}>Pending retry</option>
+      <option value="fail" {{if eq .Data.Status "fail"}}selected{{end}}>Failed</option>
+    </select>
+    <button type="submit" class="secondary">Filter</button>
+  </div>
+</form>
+
+{{template "attempts" .}}
+{{end}}

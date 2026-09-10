@@ -1,0 +1,99 @@
+{{define "layout"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>{{.Title}} — webhooks</title>
+<style>{{template "style"}}</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <a class="brand" href="/portal">Webhooks</a>
+    <nav>
+      <a href="/portal">Endpoints</a>
+      <a href="/portal/log">Delivery log</a>
+      <a href="/portal/tail">Live tail</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+{{if .Flash}}<div class="flash {{.FlashKind}}">{{.Flash}}</div>{{end}}
+{{template "content" .}}
+</main>
+<footer class="wrap">
+  <span>Deliveries are retried for about a day. Verify the signature on every request.</span>
+</footer>
+</body>
+</html>{{end}}
+
+{{define "style"}}
+:root {
+  --bg: #fbfbfd; --panel: #fff; --ink: #16181d; --muted: #6b7280;
+  --line: #e5e7eb; --accent: #3b5bdb; --ok: #087f5b; --warn: #b45309; --bad: #c92a2a;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161a; --panel: #1b1e24; --ink: #e9ecef; --muted: #9aa4b2;
+    --line: #2b3038; --accent: #7c94f4; --ok: #2f9e44; --warn: #e8a33d; --bad: #ff6b6b;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.wrap { max-width: 68rem; margin: 0 auto; padding: 0 1.25rem; }
+header { border-bottom: 1px solid var(--line); background: var(--panel); }
+header .wrap { display: flex; align-items: center; gap: 1.5rem; height: 3.5rem; }
+.brand { font-weight: 650; text-decoration: none; color: var(--ink); }
+nav { display: flex; gap: 1rem; margin-left: auto; }
+nav a { color: var(--muted); text-decoration: none; font-size: .925rem; }
+nav a:hover { color: var(--ink); }
+main { padding: 1.75rem 1.25rem 3rem; }
+footer { color: var(--muted); font-size: .85rem; padding-bottom: 2rem; }
+h1 { font-size: 1.35rem; margin: 0 0 1rem; }
+h2 { font-size: 1.05rem; margin: 2rem 0 .75rem; }
+p.hint { color: var(--muted); margin: .25rem 0 1rem; }
+.panel {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: .625rem; padding: 1.25rem; margin-bottom: 1.25rem;
+}
+table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+th, td { text-align: left; padding: .55rem .5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 550; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; }
+tr:last-child td { border-bottom: 0; }
+code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85em; }
+label { display: block; font-size: .85rem; color: var(--muted); margin: .85rem 0 .3rem; }
+input[type=text], input[type=url], textarea, select {
+  width: 100%; padding: .5rem .6rem; border: 1px solid var(--line);
+  border-radius: .375rem; background: var(--bg); color: var(--ink); font: inherit;
+}
+textarea { min-height: 6rem; font-family: ui-monospace, monospace; font-size: .85rem; }
+button, .button {
+  font: inherit; padding: .45rem .9rem; border-radius: .375rem; cursor: pointer;
+  border: 1px solid var(--accent); background: var(--accent); color: #fff; text-decoration: none;
+}
+button.secondary, .button.secondary { background: transparent; color: var(--accent); }
+button.danger { background: transparent; border-color: var(--bad); color: var(--bad); }
+.row { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; margin-top: 1rem; }
+.badge {
+  display: inline-block; padding: .1rem .45rem; border-radius: 999px;
+  font-size: .75rem; border: 1px solid currentColor;
+}
+.badge.ok { color: var(--ok); } .badge.warn { color: var(--warn); } .badge.bad { color: var(--bad); }
+.flash { padding: .7rem .9rem; border-radius: .375rem; margin-bottom: 1.25rem; border: 1px solid; }
+.flash.ok { color: var(--ok); border-color: var(--ok); }
+.flash.bad { color: var(--bad); border-color: var(--bad); }
+.muted { color: var(--muted); }
+.stack { display: grid; gap: .35rem; }
+.stats { display: flex; gap: 2rem; }
+.stats div { display: grid; }
+.stats strong { font-size: 1.5rem; font-weight: 600; }
+.stats span { color: var(--muted); font-size: .8rem; }
+pre { background: var(--bg); border: 1px solid var(--line); border-radius: .375rem;
+      padding: .75rem; overflow-x: auto; margin: .35rem 0 0; }
+#tail { min-height: 12rem; }
+.empty { color: var(--muted); padding: 1.5rem 0; text-align: center; }
+{{end}}

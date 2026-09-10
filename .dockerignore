@@ -1,0 +1,6 @@
+.git
+.github
+bench/results
+deploy/grafana/data
+docs
+*.md

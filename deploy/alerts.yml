@@ -1,0 +1,49 @@
+# Alert on the worst tenant, not the global
+# aggregate: a global p99 hides exactly the failure this system exists to avoid.
+groups:
+  - name: huxio
+    rules:
+      - alert: HuxioQueueLagHigh
+        expr: max by (pool) (huxio_queue_lag_seconds) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Queue lag above the 1s SLO in pool {{ $labels.pool }}"
+
+      - alert: HuxioAttemptWriterBacklogged
+        expr: huxio_attempt_writer_queue_depth > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Attempt writer backlogged: Postgres is the bottleneck"
+
+      - alert: HuxioConfigSnapshotStale
+        expr: huxio_config_snapshot_age_seconds > 300
+        for: 2m
+        labels:
+          severity: critical
+          annotations_hint: "LISTEN huxio_config has died; config changes are not propagating"
+        annotations:
+          summary: "Config snapshot older than 5 minutes"
+
+      - alert: HuxioWorstTenantDeliveryP99
+        expr: |
+          max by (org) (
+            histogram_quantile(0.99, sum by (org, le) (rate(huxio_delivery_internal_seconds_bucket[5m])))
+          ) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Worst-tenant internal delivery p99 above 50ms"
+
+      - alert: HuxioIngestP99
+        expr: |
+          histogram_quantile(0.99, sum by (le) (rate(huxio_ingest_duration_seconds_bucket[5m]))) > 0.025
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Ingest p99 above the 25ms SLO"

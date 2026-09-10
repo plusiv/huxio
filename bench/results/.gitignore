@@ -1,0 +1,2 @@
+# Runs are machine-specific; only the recorded baseline is committed.
+*.json
