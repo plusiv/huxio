@@ -3,7 +3,7 @@
 /out/
 /dist/
 /openapi.json
-huxio
+/huxio
 
 # Test and coverage artefacts
 coverage.out
