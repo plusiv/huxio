@@ -74,6 +74,10 @@ type Config struct {
 	RetrySchedule []time.Duration
 }
 
+// benchRequestTimeout is the delivery timeout the harness runs its engines
+// with. The tarpit hold is derived from it.
+const benchRequestTimeout = 30 * time.Second
+
 // tenant is one organization under load.
 type tenant struct {
 	orgID     string
@@ -285,7 +289,7 @@ func setup(ctx context.Context, cfg Config, tenants []tenantSpec) (*harness, err
 		tlsConfig = h.tenants[0].sink.TLSConfig()
 	}
 	deliveryClient, err := deliveryhttp.New(deliveryhttp.Options{
-		RequestTimeout:    30 * time.Second,
+		RequestTimeout:    benchRequestTimeout,
 		ResponseBodyLimit: 8 << 10,
 		Guard:             guard,
 		DNSCache:          deliveryhttp.NewDNSCache(deliveryhttp.DNSCacheOptions{}),
@@ -492,7 +496,7 @@ func (h *harness) startWorkers(ctx context.Context) func() {
 			ClaimBatchSize: 100,
 			MaxInflight:    2000,
 			PollInterval:   25 * time.Millisecond,
-			RequestTimeout: 30 * time.Second,
+			RequestTimeout: benchRequestTimeout,
 			LockTTL:        90 * time.Second,
 		})
 		if err != nil {

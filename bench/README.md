@@ -30,7 +30,7 @@ the commit and the machine. Results are not committed; a recorded baseline in
 | Scenario | What it applies | What it proves |
 |---|---|---|
 | `throughput` | One tenant, null sinks, fixed rate | The fixed cost per delivery: deliveries/sec, /sec/core, allocations each |
-| `isolation` | 10 tenants, a fifth pointed at a 30s tarpit | **The product.** Healthy-tenant p99 stays within 2x of the same run's tarpit-free baseline |
+| `isolation` | 10 tenants, a fifth pointed at a 60s tarpit, 30s per phase | **The product.** Healthy-tenant p99 stays within 2x of the same run's tarpit-free baseline |
 | `retry-storm` | Every endpoint failing, then recovering | Backoff spreads load, breakers open, and the backlog drains on recovery |
 | `cold-start` | TLS sinks, handshake per delivery | The cold-connection cost, to compare against the warm throughput run |
 | `soak` | Moderate rate for minutes | No growth in goroutines or queue depth — this is where the leak shows up |

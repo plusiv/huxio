@@ -67,6 +67,14 @@ func applyDefaults(scenario string, cfg Config) Config {
 		cfg.Sink = sinks.KindNull
 
 	case ScenarioIsolation:
+		// Each phase gets half the duration. A backlog behind a dead endpoint
+		// needs tens of seconds to build up to the worker's in-flight bound, and
+		// a 7.5s phase passed this scenario while a 30s one, run against the
+		// binary in a container, failed it by 185x. The claim has to survive the
+		// longer window.
+		if cfg.Duration < time.Minute {
+			cfg.Duration = time.Minute
+		}
 		if cfg.Tenants <= 0 {
 			cfg.Tenants = 10
 		}
@@ -181,9 +189,12 @@ func runIsolation(ctx context.Context, cfg Config) (*Result, error) {
 		specs = append(specs, tenantSpec{role: "healthy", sink: sinks.KindNull, endpoints: cfg.EndpointsPerTenant})
 	}
 	for range tarpits {
+		// The hold is twice the request timeout so every tarpitted request ends
+		// as a timeout on the sender's side. A hold equal to the timeout races
+		// it and some requests count as successes.
 		specs = append(specs, tenantSpec{
 			role: "tarpit", sink: sinks.KindTarpit,
-			delay: 30 * time.Second, endpoints: cfg.EndpointsPerTenant,
+			delay: 2 * benchRequestTimeout, endpoints: cfg.EndpointsPerTenant,
 		})
 	}
 
