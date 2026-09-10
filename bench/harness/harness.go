@@ -98,8 +98,13 @@ type harness struct {
 	// until the delivery lands.
 	runtime *runtimeComponents
 
-	mu        sync.Mutex
-	sentAt    map[string]sendRecord
+	mu     sync.Mutex
+	sentAt map[string]sendRecord
+	// pending holds arrival times for message ids whose send has not been
+	// recorded yet. The sink can see a delivery before the ingest response has
+	// been read and recorded by the sender, and those are exactly the fastest
+	// deliveries, so dropping them would bias the tail the wrong way.
+	pending   map[string][]time.Time
 	latencies map[string][]float64
 	delivered map[string]int64
 }
@@ -177,6 +182,7 @@ func setup(ctx context.Context, cfg Config, tenants []tenantSpec) (*harness, err
 		metrics:      telemetry.New(),
 		tenantsByOrg: map[string]*tenant{},
 		sentAt:       map[string]sendRecord{},
+		pending:      map[string][]time.Time{},
 		latencies:    map[string][]float64{},
 		delivered:    map[string]int64{},
 	}
@@ -391,19 +397,34 @@ func (h *harness) observeDelivery(msgID string, at time.Time) {
 
 	record, ok := h.sentAt[msgID]
 	if !ok {
-		// A retry or a replay of a message the harness has already counted.
+		// Either the delivery beat the ingest response back to the sender, or
+		// this is a retry of something from before a reset. Park it; recordSend
+		// settles the first case and resetLatencies discards the second.
+		h.pending[msgID] = append(h.pending[msgID], at)
 		return
 	}
-	h.latencies[record.orgID] = append(h.latencies[record.orgID], float64(at.Sub(record.at).Microseconds())/1000)
-	h.delivered[record.orgID]++
+	h.credit(record, at)
 }
 
 // recordSend remembers when a message was accepted, so the sink can compute
-// the ingest-to-delivery latency.
+// the ingest-to-delivery latency, and credits any arrival that got here first.
 func (h *harness) recordSend(orgID, msgID string, at time.Time) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.sentAt[msgID] = sendRecord{orgID: orgID, at: at}
+	record := sendRecord{orgID: orgID, at: at}
+	h.sentAt[msgID] = record
+	if early, ok := h.pending[msgID]; ok {
+		delete(h.pending, msgID)
+		for _, arrived := range early {
+			h.credit(record, arrived)
+		}
+	}
+}
+
+// credit records one delivery against its tenant. The caller holds h.mu.
+func (h *harness) credit(record sendRecord, at time.Time) {
+	h.latencies[record.orgID] = append(h.latencies[record.orgID], float64(at.Sub(record.at).Microseconds())/1000)
+	h.delivered[record.orgID]++
 }
 
 // close tears the run down.

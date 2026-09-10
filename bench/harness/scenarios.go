@@ -536,6 +536,7 @@ func (h *harness) resetLatencies() {
 	h.latencies = map[string][]float64{}
 	h.delivered = map[string]int64{}
 	h.sentAt = map[string]sendRecord{}
+	h.pending = map[string][]time.Time{}
 }
 
 func (h *harness) tenantsWithRole(role string) []*tenant {
