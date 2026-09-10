@@ -2,6 +2,7 @@ package dispatch_test
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -23,6 +24,9 @@ func TestLaneConcurrencyNeverExceedsItsBound(t *testing.T) {
 	lane := dispatch.NewLane("ep_1", dispatch.LaneOptions{
 		InitialConcurrency: bound,
 		MaxConcurrency:     bound,
+		// Every worker may queue: this test is about the concurrency bound, not
+		// the waiting room.
+		MaxWaiters: workers,
 	})
 
 	var (
@@ -64,6 +68,51 @@ func TestLaneConcurrencyNeverExceedsItsBound(t *testing.T) {
 	}
 	if lane.InFlight() != 0 {
 		t.Errorf("InFlight = %d after every release, want 0", lane.InFlight())
+	}
+}
+
+// The waiting room is bounded so an endpoint that stopped answering cannot
+// accumulate waiters without limit: past the bound Acquire refuses at once
+// instead of parking another goroutine and another locked task.
+func TestLaneAcquireRefusesWhenTheWaitingRoomIsFull(t *testing.T) {
+	t.Parallel()
+
+	lane := dispatch.NewLane("ep_1", dispatch.LaneOptions{
+		InitialConcurrency: 1, MaxConcurrency: 1, MaxWaiters: 2,
+	})
+	if err := lane.Acquire(context.Background()); err != nil {
+		t.Fatalf("Acquire: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	waiting := make(chan error, 2)
+	for range 2 {
+		go func() { waiting <- lane.Acquire(ctx) }()
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for lane.Waiting() < 2 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if lane.Waiting() != 2 {
+		t.Fatalf("Waiting = %d, want 2 parked callers", lane.Waiting())
+	}
+
+	if err := lane.Acquire(ctx); !errors.Is(err, dispatch.ErrLaneSaturated) {
+		t.Fatalf("third waiter got %v, want ErrLaneSaturated without waiting", err)
+	}
+
+	// A release admits exactly one parked caller; the room drains as slots free.
+	lane.Release()
+	if err := <-waiting; err != nil {
+		t.Fatalf("parked caller: %v", err)
+	}
+	cancel()
+	if err := <-waiting; err == nil {
+		t.Fatal("second parked caller must fail once its context is cancelled")
+	}
+	if lane.Waiting() != 0 {
+		t.Errorf("Waiting = %d after the room drained, want 0", lane.Waiting())
 	}
 }
 

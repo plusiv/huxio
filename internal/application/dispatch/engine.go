@@ -46,10 +46,12 @@ type EngineOptions struct {
 	StaleSnapshotDelay time.Duration
 	// LaneWaitTimeout is how long a delivery waits for a slot in its endpoint's
 	// lane before the task is put back in the queue. Waiting a little absorbs a
-	// burst; waiting forever would let one saturated endpoint hold this worker's
-	// capacity.
+	// burst without a round trip to Postgres. A waiting delivery gives up its
+	// in-flight slot for the duration, so however many pile up behind a dead
+	// endpoint, they cannot stop this worker claiming other endpoints' work.
 	LaneWaitTimeout time.Duration
-	// LaneRequeueDelay is how long a task deferred for lane saturation waits.
+	// LaneRequeueDelay is how long a task deferred for lane saturation waits
+	// before it is visible again.
 	LaneRequeueDelay time.Duration
 	// QuarantinePool receives endpoints whose breaker has been open past
 	// QuarantineAfter.
@@ -301,27 +303,20 @@ func (e *Engine) claimAndDispatch(ctx context.Context) (int, error) {
 	}
 
 	for _, task := range tasks {
-		select {
-		case e.inflight <- struct{}{}:
-		case <-ctx.Done():
-			// Give back what has not been started so another worker can pick it up
-			// immediately instead of waiting for the lock to expire.
+		slot := &inflightSlot{engine: e}
+		if err := slot.acquire(ctx); err != nil {
+			// Shutting down. Give back what has not been started so another worker
+			// can pick it up immediately instead of waiting for the lock to expire.
 			e.release(ctx, tasks)
-			return len(tasks), nil
+			return len(tasks), err
 		}
 
 		e.wg.Add(1)
-		if e.metrics.InflightTotal != nil {
-			e.metrics.InflightTotal(float64(len(e.inflight)))
-		}
 
-		go func(task entities.DeliveryTask) {
+		go func(task entities.DeliveryTask, slot *inflightSlot) {
 			defer func() {
-				<-e.inflight
+				slot.release()
 				e.wg.Done()
-				if e.metrics.InflightTotal != nil {
-					e.metrics.InflightTotal(float64(len(e.inflight)))
-				}
 			}()
 
 			// Detached from the loop's cancellation on purpose. On shutdown the claim
@@ -335,11 +330,51 @@ func (e *Engine) claimAndDispatch(ctx context.Context) (int, error) {
 			)
 			defer cancel()
 
-			e.handle(taskCtx, task)
-		}(task)
+			e.handle(taskCtx, task, slot)
+		}(task, slot)
 	}
 
 	return len(tasks), nil
+}
+
+// inflightSlot is one delivery's hold on the engine's in-flight budget. It is
+// taken when the task is claimed and given back when the delivery is done,
+// except while the delivery waits for a lane slot: a waiter has no request on
+// the wire and holds no payload, so it should cost the worker nothing. Without
+// that release, one endpoint that stopped answering fills the whole budget
+// with waiters and the worker stops claiming everyone else's work.
+type inflightSlot struct {
+	engine *Engine
+	held   bool
+}
+
+func (s *inflightSlot) acquire(ctx context.Context) error {
+	if s.held {
+		return nil
+	}
+	select {
+	case s.engine.inflight <- struct{}{}:
+		s.held = true
+		s.engine.reportInflight()
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (s *inflightSlot) release() {
+	if !s.held {
+		return
+	}
+	<-s.engine.inflight
+	s.held = false
+	s.engine.reportInflight()
+}
+
+func (e *Engine) reportInflight() {
+	if e.metrics.InflightTotal != nil {
+		e.metrics.InflightTotal(float64(len(e.inflight)))
+	}
 }
 
 func (e *Engine) release(ctx context.Context, tasks []entities.DeliveryTask) {
@@ -355,7 +390,7 @@ func (e *Engine) release(ctx context.Context, tasks []entities.DeliveryTask) {
 }
 
 // handle dispatches one task by kind.
-func (e *Engine) handle(ctx context.Context, task entities.DeliveryTask) {
+func (e *Engine) handle(ctx context.Context, task entities.DeliveryTask, slot *inflightSlot) {
 	ctx = logger.With(ctx, map[string]any{
 		"task_id": task.ID,
 		"msg_id":  task.MsgID,
@@ -366,7 +401,7 @@ func (e *Engine) handle(ctx context.Context, task entities.DeliveryTask) {
 	case entities.TaskFanout:
 		e.handleFanout(ctx, task)
 	case entities.TaskDeliver:
-		e.handleDeliver(ctx, task)
+		e.handleDeliver(ctx, task, slot)
 	default:
 		logger.FromContext(ctx).Error().Int("kind", int(task.Kind)).Msg("unknown task kind, dropping")
 		e.complete(ctx, task.ID)
@@ -462,7 +497,7 @@ func (e *Engine) handleFanout(ctx context.Context, task entities.DeliveryTask) {
 
 // handleDeliver signs and sends one message to one endpoint, records the
 // attempt, and decides whether to retry.
-func (e *Engine) handleDeliver(ctx context.Context, task entities.DeliveryTask) {
+func (e *Engine) handleDeliver(ctx context.Context, task entities.DeliveryTask, slot *inflightSlot) {
 	log := logger.FromContext(ctx)
 
 	if task.EndpointID == nil {
@@ -513,15 +548,26 @@ func (e *Engine) handleDeliver(ctx context.Context, task entities.DeliveryTask) 
 			return
 		}
 
-		waitCtx, cancel := context.WithTimeout(ctx, e.opts.LaneWaitTimeout)
-		err := lane.Acquire(waitCtx)
-		cancel()
-		if err != nil {
-			// The endpoint is saturated. Its excess work goes back to Postgres rather
-			// than occupying this worker, which is what stops one slow endpoint
-			// consuming capacity other tenants need.
-			e.deferTask(ctx, task.ID, "endpoint lane is saturated")
-			return
+		if !lane.TryAcquire() {
+			// The lane is full. Wait a little for a slot, but not on the engine's
+			// in-flight budget: a waiter has nothing on the wire, and if waiters
+			// counted, enough tasks behind one dead endpoint would fill the budget
+			// and stop this worker claiming other tenants' work.
+			slot.release()
+			waitCtx, cancel := context.WithTimeout(ctx, e.opts.LaneWaitTimeout)
+			err := lane.Acquire(waitCtx)
+			cancel()
+			if err != nil {
+				// Saturated. The excess goes back to Postgres, where it is durable and
+				// costs this worker nothing until the lane has room again.
+				e.deferForSaturation(ctx, task.ID)
+				return
+			}
+			if err := slot.acquire(ctx); err != nil {
+				lane.Release()
+				e.deferForSaturation(ctx, task.ID)
+				return
+			}
 		}
 		defer lane.Release()
 	}
@@ -870,6 +916,19 @@ func (e *Engine) reportMetrics(orgID string, status entities.AttemptStatus, resu
 	}
 	if e.metrics.DeliveriesTotal != nil {
 		e.metrics.DeliveriesTotal(orgID, outcome, statusClass(result.StatusCode))
+	}
+}
+
+// deferForSaturation puts a task back for the lane requeue delay without
+// counting an attempt. Unlike deferTask it does not touch the config snapshot:
+// a full lane says nothing about the configuration being stale, and asking for
+// a reload on every saturated task would rebuild the snapshot in a loop for
+// as long as the endpoint stays down.
+func (e *Engine) deferForSaturation(ctx context.Context, taskID int64) {
+	logger.FromContext(ctx).Debug().Msg("deferring task: endpoint lane is saturated")
+	if err := e.taskQueue.Defer(ctx, taskID, e.opts.LaneRequeueDelay); err != nil {
+		// The lock expires and the maintenance loop returns the task anyway.
+		logger.FromContext(ctx).Warn().Err(err).Int64("task_id", taskID).Msg("failed to defer task")
 	}
 }
 

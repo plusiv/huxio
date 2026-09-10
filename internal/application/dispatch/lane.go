@@ -6,8 +6,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/rotisserie/eris"
 	"golang.org/x/time/rate"
 )
+
+// ErrLaneSaturated is returned by Acquire when the lane is full and its
+// waiting room is full too. The caller should put the task back in the queue
+// rather than wait.
+var ErrLaneSaturated = eris.New("lane saturated: no slot and no room to wait")
 
 // LaneOptions configures per-endpoint concurrency.
 type LaneOptions struct {
@@ -20,6 +26,12 @@ type LaneOptions struct {
 	SuccessesPerIncrease int
 	// RateLimit is an optional per-endpoint cap in requests per second.
 	RateLimit int
+	// MaxWaiters bounds how many deliveries may queue for a slot in this lane
+	// at once. Waiting absorbs a burst without a round trip to Postgres, but an
+	// endpoint that has stopped answering would otherwise accumulate waiters
+	// without limit, one goroutine and one locked task each. Past the bound
+	// Acquire fails immediately and the task goes back to the queue.
+	MaxWaiters int
 	// Breaker configures this lane's circuit breaker.
 	Breaker BreakerOptions
 	// Now lets a test drive the timers forward instead of sleeping.
@@ -44,6 +56,7 @@ type Lane struct {
 	mu          sync.Mutex
 	concurrency int
 	inFlight    int
+	waiting     int
 	waiters     []chan struct{}
 	successes   int
 
@@ -75,6 +88,12 @@ func NewLane(endpointID string, opts LaneOptions) *Lane {
 	if opts.SuccessesPerIncrease <= 0 {
 		opts.SuccessesPerIncrease = 10
 	}
+	if opts.MaxWaiters <= 0 {
+		// Four rounds of the lane's ceiling: deep enough that a healthy endpoint
+		// drains a claim batch without touching Postgres, shallow enough that a
+		// dead one pins a few hundred tasks at most.
+		opts.MaxWaiters = 4 * opts.MaxConcurrency
+	}
 	if opts.Now == nil {
 		opts.Now = time.Now
 	}
@@ -99,11 +118,25 @@ func (l *Lane) EndpointID() string { return l.endpointID }
 func (l *Lane) Breaker() *Breaker { return l.breaker }
 
 // Acquire takes a concurrency slot, waiting while the lane is at capacity.
-// Waiting here is what propagates backpressure: a full lane blocks the
-// submitting worker, which stops claiming, which leaves tasks in Postgres
-// where they are durable.
+// The wait is bounded two ways: by the caller's context, and by MaxWaiters,
+// past which it returns ErrLaneSaturated at once. A caller that is refused
+// should defer the task to the queue, where it is durable and costs nothing,
+// rather than hold anything in this worker's memory.
 func (l *Lane) Acquire(ctx context.Context) error {
 	l.touch()
+
+	l.mu.Lock()
+	if l.waiting >= l.opts.MaxWaiters {
+		l.mu.Unlock()
+		return ErrLaneSaturated
+	}
+	l.waiting++
+	l.mu.Unlock()
+	defer func() {
+		l.mu.Lock()
+		l.waiting--
+		l.mu.Unlock()
+	}()
 
 	if l.limiter != nil {
 		// The rate limiter is per endpoint and lives in this worker's memory,
@@ -135,7 +168,8 @@ func (l *Lane) Acquire(ctx context.Context) error {
 	}
 }
 
-// TryAcquire takes a slot without waiting.
+// TryAcquire takes a slot without waiting. It fails rather than waits on the
+// rate limiter too, so a caller that gets true may deliver immediately.
 func (l *Lane) TryAcquire() bool {
 	l.touch()
 
@@ -144,9 +178,20 @@ func (l *Lane) TryAcquire() bool {
 	if l.inFlight >= l.concurrency {
 		return false
 	}
+	// The slot check comes first so a refused call has not spent a rate token.
+	if l.limiter != nil && !l.limiter.Allow() {
+		return false
+	}
 	l.inFlight++
 	l.inflightGauge.Store(int32(l.inFlight))
 	return true
+}
+
+// Waiting reports how many deliveries are queued for a slot.
+func (l *Lane) Waiting() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.waiting
 }
 
 // Release returns a slot.

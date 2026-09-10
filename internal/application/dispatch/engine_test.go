@@ -52,6 +52,7 @@ type fixtureOptions struct {
 	// rotatedSecrets are previous secrets still inside their overlap window.
 	rotatedSecrets []string
 	invalidator    dispatch.SnapshotInvalidator
+	lanes          *dispatch.LaneManager
 }
 
 func newEngineFixture(t *testing.T, opts fixtureOptions) *engineFixture {
@@ -122,6 +123,7 @@ func newEngineFixture(t *testing.T, opts fixtureOptions) *engineFixture {
 		Policy:              opts.policy,
 		PartitionSource:     parts,
 		SnapshotInvalidator: opts.invalidator,
+		LaneManager:         opts.lanes,
 	}, engineOpts)
 	if err != nil {
 		t.Fatalf("NewEngine: %v", err)
