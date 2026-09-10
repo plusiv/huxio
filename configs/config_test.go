@@ -34,6 +34,9 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.CompatHeaders != configs.CompatHeadersStandard {
 		t.Errorf("CompatHeaders = %q", cfg.CompatHeaders)
 	}
+	if cfg.LaneWaitTimeout != 2*time.Second || cfg.LaneRequeueDelay != time.Second {
+		t.Errorf("lane wait/requeue = %s/%s, want 2s/1s", cfg.LaneWaitTimeout, cfg.LaneRequeueDelay)
+	}
 }
 
 func TestLoadBuildsDSNFromParts(t *testing.T) {

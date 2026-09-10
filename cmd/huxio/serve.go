@@ -342,6 +342,8 @@ func serve(ctx context.Context, cfg *configs.Config) error {
 				MaxInflight:       cfg.WorkerMaxInflight,
 				LockTTL:           cfg.TaskLockTTL,
 				PollInterval:      cfg.QueuePollInterval,
+				LaneWaitTimeout:   cfg.LaneWaitTimeout,
+				LaneRequeueDelay:  cfg.LaneRequeueDelay,
 				RequestTimeout:    cfg.WorkerRequestTimeout,
 				ResponseBodyLimit: cfg.AttemptBodyLimitBytes,
 				CompatHeaders:     signing.HeaderScheme(cfg.CompatHeaders),

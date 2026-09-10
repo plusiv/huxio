@@ -74,6 +74,8 @@ type Config struct {
 	ClaimBatchSize       int
 	TaskLockTTL          time.Duration
 	QueuePollInterval    time.Duration
+	LaneWaitTimeout      time.Duration
+	LaneRequeueDelay     time.Duration
 
 	LaneInitialConcurrency int
 	LaneMaxConcurrency     int
@@ -149,6 +151,8 @@ type envVars struct {
 	ClaimBatchSize       int           `default:"100"  split_words:"true"`
 	TaskLockTTL          time.Duration `default:"0s"   split_words:"true"`
 	QueuePollInterval    time.Duration `default:"250ms" split_words:"true"`
+	LaneWaitTimeout      time.Duration `default:"2s"   split_words:"true"`
+	LaneRequeueDelay     time.Duration `default:"1s"   split_words:"true"`
 
 	LaneInitialConcurrency int           `default:"8"   split_words:"true"`
 	LaneMaxConcurrency     int           `default:"64"  split_words:"true"`
@@ -268,6 +272,8 @@ func Load() (*Config, error) {
 		ClaimBatchSize:       env.ClaimBatchSize,
 		TaskLockTTL:          lockTTL,
 		QueuePollInterval:    env.QueuePollInterval,
+		LaneWaitTimeout:      env.LaneWaitTimeout,
+		LaneRequeueDelay:     env.LaneRequeueDelay,
 
 		LaneInitialConcurrency: env.LaneInitialConcurrency,
 		LaneMaxConcurrency:     env.LaneMaxConcurrency,
