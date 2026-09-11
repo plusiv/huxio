@@ -20,9 +20,9 @@ type HeaderScheme string
 const (
 	// SchemeStandard emits webhook-id / webhook-timestamp / webhook-signature.
 	SchemeStandard HeaderScheme = "standard"
-	// SchemeHuxio emits huxio-prefixed names instead. Receivers written against
-	// the incumbent look for those, so supporting both means a migrating
-	// tenant changes one config value rather than redeploying every receiver.
+	// SchemeHuxio emits huxio-prefixed names instead. A receiver already
+	// written against that naming needs no changes; a migrating tenant just
+	// changes one config value rather than redeploying every receiver.
 	SchemeHuxio HeaderScheme = "huxio"
 )
 

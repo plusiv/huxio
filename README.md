@@ -113,8 +113,8 @@ overloaded.
 if you want asymmetric verification. Secret rotation keeps the old secret
 signing alongside the new one for an overlap window, so receivers roll over
 without a coordinated deploy. Headers can be emitted in either the Standard
-Webhooks naming or the `huxio-` prefixed naming, which is one config value rather
-than a receiver rewrite.
+Webhooks naming or the `huxio-` prefixed naming, which is one config value
+rather than a receiver rewrite.
 
 **A delivery log, and the ability to act on it.** Every attempt is recorded with
 its status, response code, truncated body, and duration. Resend one delivery,

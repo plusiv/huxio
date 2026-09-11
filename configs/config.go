@@ -27,7 +27,7 @@ const (
 // CompatHeaders selects the signature header naming scheme.
 const (
 	CompatHeadersStandard = "standard"
-	CompatHeadersHuxio     = "huxio"
+	CompatHeadersHuxio    = "huxio"
 )
 
 // QueuePartitions is the fixed partition count. It is a constant, not a knob:
