@@ -78,6 +78,7 @@ type Runner struct {
 	opts Options
 }
 
+// New builds a Runner from its dependencies and options.
 func New(deps Deps, opts Options) (*Runner, error) {
 	if len(deps.Pools) == 0 {
 		return nil, eris.New("worker: at least one pool is required")

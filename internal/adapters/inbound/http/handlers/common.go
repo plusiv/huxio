@@ -22,20 +22,6 @@ type CursorResponse[T any] struct {
 	Done         bool    `json:"done"`
 }
 
-// newCursorResponse converts a repository result into the wire envelope.
-func newCursorResponse[T any](result repositories.CursorResult[T]) CursorResponse[T] {
-	data := result.Items
-	if data == nil {
-		data = []T{}
-	}
-	return CursorResponse[T]{
-		Data:         data,
-		Iterator:     result.NextCursor,
-		PrevIterator: result.PrevCursor,
-		Done:         !result.HasMore,
-	}
-}
-
 // pagination reads the cursor parameters, accepting both the compatible
 // `iterator` name and the plainer `cursor`.
 func pagination(c *echo.Context) repositories.CursorPagination {

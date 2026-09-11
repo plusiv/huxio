@@ -66,7 +66,7 @@ func withMigrationDB(cmd *cobra.Command, fn func(ctx context.Context, db *sql.DB
 	if err != nil {
 		return eris.Wrap(err, "open database")
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	return fn(cmd.Context(), db)
 }

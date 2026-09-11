@@ -535,7 +535,7 @@ func (h *harness) send(ctx context.Context, t *tenant, payloadBytes int) (time.D
 	if err != nil {
 		return time.Since(started), err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	elapsed := time.Since(started)
 	if resp.StatusCode != http.StatusAccepted {

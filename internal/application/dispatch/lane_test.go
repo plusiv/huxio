@@ -142,7 +142,9 @@ func TestLaneTryAcquire(t *testing.T) {
 
 	lane := dispatch.NewLane("ep_1", dispatch.LaneOptions{InitialConcurrency: 2, MaxConcurrency: 2})
 
-	if !lane.TryAcquire() || !lane.TryAcquire() {
+	first := lane.TryAcquire()
+	second := lane.TryAcquire()
+	if !first || !second {
 		t.Fatal("both slots must be available")
 	}
 	if lane.TryAcquire() {

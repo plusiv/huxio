@@ -4,6 +4,7 @@
 package binder
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -31,7 +32,7 @@ func (vb *ValidatingBinder) Bind(c *echo.Context, target any) error {
 	}
 	if err := vb.validate.Struct(target); err != nil {
 		var validationErrors validator.ValidationErrors
-		if ok := asValidationErrors(err, &validationErrors); ok && len(validationErrors) > 0 {
+		if errors.As(err, &validationErrors) && len(validationErrors) > 0 {
 			first := validationErrors[0]
 			return echo.NewHTTPError(http.StatusUnprocessableEntity,
 				fmt.Sprintf("field '%s' failed validation: %s", first.Field(), first.Tag()))
@@ -39,13 +40,4 @@ func (vb *ValidatingBinder) Bind(c *echo.Context, target any) error {
 		return echo.NewHTTPError(http.StatusUnprocessableEntity, "validation failed")
 	}
 	return nil
-}
-
-func asValidationErrors(err error, target *validator.ValidationErrors) bool {
-	errs, ok := err.(validator.ValidationErrors)
-	if !ok {
-		return false
-	}
-	*target = errs
-	return true
 }

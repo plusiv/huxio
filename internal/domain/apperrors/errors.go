@@ -11,6 +11,8 @@ import "github.com/rotisserie/eris"
 // is noted below so the two stay legible together.
 type ErrorKind string
 
+// The kinds a use case can report. The trailing comment on each is the status
+// the HTTP adapter produces for it.
 const (
 	KindNotFound        ErrorKind = "not_found"         // 404
 	KindConflict        ErrorKind = "conflict"          // 409

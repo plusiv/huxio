@@ -62,7 +62,8 @@ func TestTarpitHoldsUntilTheSenderGivesUp(t *testing.T) {
 
 	// The sender's own timeout is what ends a tarpitted request, which is the
 	// behaviour the isolation scenario depends on.
-	if _, err := post(t, sink, 200*time.Millisecond); err == nil {
+	if resp, err := post(t, sink, 200*time.Millisecond); err == nil {
+		resp.Body.Close()
 		t.Fatal("expected the request to time out")
 	}
 	if got := sink.Stats().Requests; got != 1 {

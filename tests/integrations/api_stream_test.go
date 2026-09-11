@@ -44,7 +44,7 @@ func TestAPIAttemptStreamTailsNewAttempts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open stream: %v", err)
 	}
-	defer resp.Body.Close()
+	t.Cleanup(func() { resp.Body.Close() })
 
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("stream = %d", resp.StatusCode)

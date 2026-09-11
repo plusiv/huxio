@@ -3,7 +3,6 @@ package deliveryhttp
 import (
 	"context"
 	"net"
-	"net/netip"
 	"time"
 
 	"github.com/rotisserie/eris"
@@ -65,14 +64,4 @@ func (d *guardedDialer) DialContext(ctx context.Context, network, address string
 		lastErr = ErrBlockedDestination
 	}
 	return nil, lastErr
-}
-
-// resolvedAddrs is used by tests to assert what a host resolves to through the
-// cache and the guard.
-func (d *guardedDialer) resolvedAddrs(ctx context.Context, host string) ([]netip.Addr, error) {
-	addrs, err := d.cache.Lookup(ctx, host)
-	if err != nil {
-		return nil, err
-	}
-	return d.guard.Filter(addrs), nil
 }

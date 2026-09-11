@@ -154,7 +154,7 @@ func (w *AttemptWriter) Run(ctx context.Context) error {
 						batch = w.flush(flushCtx, batch)
 					}
 				default:
-					batch = w.flush(flushCtx, batch)
+					w.flush(flushCtx, batch)
 					w.closeOnce.Do(func() { close(w.done) })
 					if w.depth != nil {
 						w.depth.Set(0)

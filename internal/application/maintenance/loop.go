@@ -82,6 +82,7 @@ type Deps struct {
 	Hooks           Hooks
 }
 
+// New builds a Loop from its dependencies and options.
 func New(deps Deps, opts Options) (*Loop, error) {
 	if deps.LeaseRepo == nil || deps.QueueRepo == nil || deps.PartitionRepo == nil {
 		return nil, eris.New("maintenance: missing a dependency")

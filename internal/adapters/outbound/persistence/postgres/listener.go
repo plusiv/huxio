@@ -33,16 +33,12 @@ func (l *Listener) Listen(
 	log := logger.FromContext(ctx).With().Str("channel", channel).Logger()
 	delay := l.reconnectDelay
 
-	for {
-		if err := ctx.Err(); err != nil {
-			return nil
-		}
-
+	for ctx.Err() == nil {
 		err := l.listenOnce(ctx, channel, handle)
-		switch {
-		case ctx.Err() != nil:
-			return nil
-		case err != nil:
+		if ctx.Err() != nil {
+			break
+		}
+		if err != nil {
 			log.Warn().Err(err).Dur("retry_in", delay).Msg("notification listener dropped, reconnecting")
 		}
 
@@ -51,10 +47,15 @@ func (l *Listener) Listen(
 			return nil
 		case <-time.After(delay):
 		}
-		if delay = delay * 2; delay > l.maxDelay {
+		delay *= 2
+		if delay > l.maxDelay {
 			delay = l.maxDelay
 		}
 	}
+	// A cancelled context ends Listen cleanly even if the last listenOnce call
+	// also failed: ctx cancellation is the expected way to stop, not a fault,
+	// and it always takes priority over whatever error came with it.
+	return nil //nolint:nilerr
 }
 
 func (l *Listener) listenOnce(

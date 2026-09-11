@@ -148,7 +148,7 @@ func (c *Client) Deliver(ctx context.Context, req dispatch.DeliveryRequest) disp
 			ConnectionReused: reused,
 		}
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Read a bounded prefix, then drain: an unbounded read puts a 50MB error
 	// page in the database, and an undrained body leaks the connection.

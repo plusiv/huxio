@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"errors"
 	"net/http"
 	"runtime"
 
@@ -20,7 +21,7 @@ func Recover() echo.MiddlewareFunc {
 				if recovered == nil {
 					return
 				}
-				if recovered == http.ErrAbortHandler {
+				if cause, ok := recovered.(error); ok && errors.Is(cause, http.ErrAbortHandler) {
 					panic(recovered)
 				}
 
