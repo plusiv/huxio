@@ -22,6 +22,11 @@ coverage.html
 # Benchmark runs are machine-specific; bench/baselines is committed.
 /bench/results/*.json
 
+# Internal-only comparison tooling and its output. Not ready to share.
+/bench/compare/
+/cmd/benchcompare/
+/bench/results/compare*/
+
 # Agent and design notes, kept local
 AGENTS.md
 CLAUDE.md
