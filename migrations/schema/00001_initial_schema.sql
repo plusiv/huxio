@@ -207,7 +207,7 @@ CREATE TABLE delivery_task (
 ) WITH (fillfactor = 70);
 
 CREATE INDEX task_claim_idx
-    ON delivery_task (pool, partition_key, visible_at, id)
+    ON delivery_task (pool, visible_at, id)
     WHERE locked_until IS NULL AND deleted_at IS NULL;
 
 CREATE INDEX task_stuck_idx

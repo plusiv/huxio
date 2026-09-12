@@ -24,7 +24,7 @@ type QueueRepo struct {
 // NewQueueRepo builds the repository.
 func NewQueueRepo(store *Store) *QueueRepo { return &QueueRepo{store: store} }
 
-// claimQuery locks a batch of ready tasks for the owned partitions and hands
+// ClaimQuery locks a batch of ready tasks for the owned partitions and hands
 // them back in the same round trip. The shape is worth reading closely:
 //
 //   - the inner SELECT ... FOR UPDATE SKIP LOCKED is what makes this a queue.
@@ -36,10 +36,18 @@ func NewQueueRepo(store *Store) *QueueRepo { return &QueueRepo{store: store} }
 //   - partition_key = ANY(...) restricts each worker to the partitions it
 //     leases. Two workers therefore never look at the same rows, and
 //     SKIP LOCKED almost never has to skip anything.
+//   - ORDER BY visible_at, id is the order task_claim_idx is already in,
+//     which is the whole reason that index leads with visible_at rather than
+//     partition_key. Ordering the index the other way makes the planner read
+//     every ready row and sort it to find the batch, so the claim gets
+//     slower as the backlog grows, which is exactly backwards.
 //   - locked_until is a timestamp, not a boolean: a worker that dies holds
 //     nothing forever, and the maintenance loop returns the row once the
 //     lease has passed.
-const claimQuery = `
+//
+// It is exported so an integration test can EXPLAIN the exact statement the
+// delivery path runs, rather than a copy of it that could drift.
+const ClaimQuery = `
 	UPDATE delivery_task t
 	SET    locked_by = $1,
 	       locked_until = now() + ($2 * interval '1 second')
@@ -65,7 +73,7 @@ func (r *QueueRepo) Claim(ctx context.Context, req repositories.ClaimRequest) ([
 	if len(req.Partitions) == 0 || req.Limit <= 0 {
 		return nil, nil
 	}
-	rows, err := r.store.Querier(ctx).Query(ctx, claimQuery,
+	rows, err := r.store.Querier(ctx).Query(ctx, ClaimQuery,
 		req.OwnerID, req.LockTTL.Seconds(), req.Pool, req.Partitions, req.Limit,
 	)
 	if err != nil {

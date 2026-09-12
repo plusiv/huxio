@@ -2,10 +2,14 @@ package integration_test
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/plusiv/huxio/configs"
+	"github.com/plusiv/huxio/internal/adapters/outbound/persistence/postgres"
 	"github.com/plusiv/huxio/internal/domain/entities"
 	"github.com/plusiv/huxio/internal/domain/repositories"
 	"github.com/plusiv/huxio/internal/utils"
@@ -320,4 +324,139 @@ func TestIngestTransactionIsAtomic(t *testing.T) {
 	if messages != 1 || tasks != 1 {
 		t.Errorf("commit produced %d messages and %d tasks, want one of each", messages, tasks)
 	}
+}
+
+// TestQueueClaimCostDoesNotTrackBacklogDepth pins the shape of the claim plan.
+//
+// The claim orders by (visible_at, id) across every partition a worker owns.
+// If the index it reads leads with partition_key, that order is not available
+// and Postgres reads every ready row and sorts it to find the batch, so a
+// worker that has fallen behind pays for the whole backlog on the one query
+// that has to run before the backlog can shrink. The assertion is on rows
+// read, not on wall time, because timing is not stable under -race or on a
+// loaded CI box.
+func TestQueueClaimCostDoesNotTrackBacklogDepth(t *testing.T) {
+	t.Parallel()
+	env := newTestEnv(t)
+	ctx := context.Background()
+
+	org := env.seedOrg(t, "Backlog")
+	app := env.seedApp(t, org.ID, "customer", nil)
+
+	const (
+		backlog = 5000
+		limit   = 100
+	)
+
+	// One ready task per row, spread over the partition space the way crc32 of
+	// an endpoint id spreads real work.
+	visible := time.Now().UTC().Add(-time.Second)
+	tasks := make([]repositories.EnqueueTask, backlog)
+	for i := range tasks {
+		endpointID := fmt.Sprintf("ep_backlog_%d", i)
+		tasks[i] = repositories.EnqueueTask{
+			PartitionKey: entities.PartitionKeyFor(endpointID),
+			Pool:         configs.DefaultPool,
+			Kind:         entities.TaskDeliver,
+			OrgID:        org.ID,
+			AppID:        app.ID,
+			MsgID:        fmt.Sprintf("msg_backlog_%d", i),
+			MsgCreatedAt: visible,
+			EndpointID:   utils.Ptr(endpointID),
+			VisibleAt:    visible,
+		}
+	}
+	if err := env.Queue.Enqueue(ctx, tasks); err != nil {
+		t.Fatalf("Enqueue: %v", err)
+	}
+	if _, err := env.Pool.Exec(ctx, `ANALYZE delivery_task`); err != nil {
+		t.Fatalf("ANALYZE: %v", err)
+	}
+
+	// EXPLAIN the claim exactly as QueueRepo.Claim issues it. The statement is
+	// rolled back so the test leaves no locked rows behind.
+	tx, err := env.Pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("Begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var plan []byte
+	err = tx.QueryRow(ctx, `EXPLAIN (ANALYZE, FORMAT JSON) `+postgres.ClaimQuery,
+		"wkr_1", float64(90), configs.DefaultPool, allPartitions(), limit,
+	).Scan(&plan)
+	if err != nil {
+		t.Fatalf("EXPLAIN the claim: %v", err)
+	}
+
+	read := claimScanRows(t, plan)
+	// The batch is 100 rows. A plan that stops when the batch is full reads a
+	// few hundred; a plan that sorts the backlog reads all 5000 to find them.
+	if read > 10*limit {
+		t.Errorf("claiming %d tasks from a %d-row backlog read %.0f rows; the claim is scanning the backlog instead of stopping at the batch\nplan: %s",
+			limit, backlog, read, plan)
+	}
+}
+
+// claimScanRows totals the rows the scans feeding the LIMIT produced, which is
+// the part of the plan the claim index governs. It deliberately ignores the
+// outer UPDATE's own join to delivery_task: the planner picks a hash join or a
+// primary-key nested loop there depending on table size, and neither choice
+// says anything about whether the claim stops at the batch.
+func claimScanRows(t *testing.T, plan []byte) float64 {
+	t.Helper()
+	var parsed []struct {
+		Plan map[string]any `json:"Plan"`
+	}
+	if err := json.Unmarshal(plan, &parsed); err != nil {
+		t.Fatalf("parse the plan: %v", err)
+	}
+	if len(parsed) == 0 {
+		t.Fatal("EXPLAIN returned no plan")
+	}
+
+	children := func(node map[string]any) []map[string]any {
+		raw, _ := node["Plans"].([]any)
+		out := make([]map[string]any, 0, len(raw))
+		for _, child := range raw {
+			if m, ok := child.(map[string]any); ok {
+				out = append(out, m)
+			}
+		}
+		return out
+	}
+
+	var limitNode map[string]any
+	var findLimit func(node map[string]any)
+	findLimit = func(node map[string]any) {
+		if limitNode != nil {
+			return
+		}
+		if nodeType, _ := node["Node Type"].(string); nodeType == "Limit" {
+			limitNode = node
+			return
+		}
+		for _, child := range children(node) {
+			findLimit(child)
+		}
+	}
+	findLimit(parsed[0].Plan)
+	if limitNode == nil {
+		t.Fatalf("no LIMIT node in the claim plan: %s", plan)
+	}
+
+	var total float64
+	var walk func(node map[string]any)
+	walk = func(node map[string]any) {
+		if nodeType, _ := node["Node Type"].(string); strings.Contains(nodeType, "Scan") {
+			rows, _ := node["Actual Rows"].(float64)
+			loops, _ := node["Actual Loops"].(float64)
+			total += rows * max(loops, 1)
+		}
+		for _, child := range children(node) {
+			walk(child)
+		}
+	}
+	walk(limitNode)
+	return total
 }
