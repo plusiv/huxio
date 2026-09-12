@@ -820,3 +820,66 @@ func TestEngineDefaultsLockTTLAboveRequestTimeout(t *testing.T) {
 		t.Error("the engine must have a worker identity")
 	}
 }
+
+func TestRunCoalescesBufferedWakeupsIntoOneClaim(t *testing.T) {
+	t.Parallel()
+
+	fixture := newEngineFixture(t, fixtureOptions{
+		// Isolate the wakeup path: no poll tick during the test.
+		engineOpts: dispatch.EngineOptions{PollInterval: time.Hour},
+	})
+
+	// A fan-out notifies for every partition it expanded into and the API
+	// notifies once per message, so under load the channel holds a burst by
+	// the time the loop looks. One claim covers every owned partition, so the
+	// burst must cost one query, not one per wakeup.
+	wakeups := make(chan int16, 256)
+	for i := 0; i < 200; i++ {
+		wakeups <- int16(i)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- fixture.engine.Run(ctx, wakeups) }()
+
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("engine Run: %v", err)
+	}
+
+	// One claim when the loop starts, one for the whole burst.
+	if got := fixture.queue.claimCount(); got != 2 {
+		t.Errorf("claims = %d for a burst of 200 wakeups, want 2: the burst must coalesce", got)
+	}
+}
+
+func TestRunIgnoresWakeupsForUnownedPartitions(t *testing.T) {
+	t.Parallel()
+
+	fixture := newEngineFixture(t, fixtureOptions{
+		engineOpts: dispatch.EngineOptions{PollInterval: time.Hour},
+	})
+	fixture.parts.store([]int16{7})
+
+	// Another worker's partitions: nothing here is ours to claim.
+	wakeups := make(chan int16, 64)
+	for i := 0; i < 50; i++ {
+		wakeups <- 3
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- fixture.engine.Run(ctx, wakeups) }()
+
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("engine Run: %v", err)
+	}
+
+	// Only the claim the loop makes on startup.
+	if got := fixture.queue.claimCount(); got != 1 {
+		t.Errorf("claims = %d for wakeups on unowned partitions, want 1", got)
+	}
+}

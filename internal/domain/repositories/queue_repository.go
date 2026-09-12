@@ -66,12 +66,32 @@ type QueueRepository interface {
 	// Release drops a task's lock without consuming an attempt, used when a
 	// worker loses its partition lease or is shutting down.
 	Release(ctx context.Context, ids []int64) error
-	// Enqueue inserts tasks outside any caller-managed transaction.
+	// Enqueue inserts tasks in one statement. Called with a context carrying
+	// a transaction it joins it. It wakes nobody: call Notify once the
+	// transaction has committed, with DistinctPartitions of the batch.
 	Enqueue(ctx context.Context, tasks []EnqueueTask) error
-	// Notify wakes workers listening for a partition.
-	Notify(ctx context.Context, partitionKey int16) error
+	// Notify wakes the workers for a set of partitions with one notification.
+	// Best effort, and deliberately outside the caller's transaction; the
+	// Postgres implementation explains why.
+	Notify(ctx context.Context, partitionKeys []int16) error
 	// RescueStuck returns tasks whose holder died back to the queue.
 	RescueStuck(ctx context.Context) (int64, error)
 	// Stats reports depth and lag per pool for metrics and alerting.
 	Stats(ctx context.Context, pools []string) ([]QueueStats, error)
+}
+
+// DistinctPartitions returns the partition keys a batch of tasks lands in,
+// each once, in first-seen order: the set to wake once the batch has
+// committed.
+func DistinctPartitions(tasks []EnqueueTask) []int16 {
+	seen := make(map[int16]struct{}, len(tasks))
+	out := make([]int16, 0, len(tasks))
+	for _, t := range tasks {
+		if _, dup := seen[t.PartitionKey]; dup {
+			continue
+		}
+		seen[t.PartitionKey] = struct{}{}
+		out = append(out, t.PartitionKey)
+	}
+	return out
 }

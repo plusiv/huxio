@@ -166,7 +166,7 @@ type Queue interface {
 	Defer(ctx context.Context, id int64, delay time.Duration) error
 	Release(ctx context.Context, ids []int64) error
 	Enqueue(ctx context.Context, tasks []repositories.EnqueueTask) error
-	Notify(ctx context.Context, partitionKey int16) error
+	Notify(ctx context.Context, partitionKeys []int16) error
 }
 
 // TxManager runs a unit of work inside one transaction, so a fan-out cannot

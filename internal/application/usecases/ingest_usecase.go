@@ -186,9 +186,11 @@ func (uc *IngestUseCase) Ingest(ctx context.Context, in IngestInput) (*IngestRes
 		return nil, apperrors.NewInternalError(err)
 	}
 
-	// Best effort: workers also poll, so a lost wakeup costs latency, not a
-	// delivery.
-	if err := uc.queueRepo.Notify(ctx, partitionKey); err != nil {
+	// Best effort, and after the commit rather than inside it: workers also
+	// poll, so a lost wakeup costs latency, not a delivery, while a NOTIFY
+	// inside the transaction would serialize every ingest commit behind one
+	// fsync (see the queue repository's Notify).
+	if err := uc.queueRepo.Notify(ctx, []int16{partitionKey}); err != nil {
 		logger.FromContext(ctx).Warn().Err(err).
 			Int16("partition_key", partitionKey).
 			Msg("queue wakeup notification failed")

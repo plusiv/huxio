@@ -19,7 +19,9 @@ type AttemptWriterOptions struct {
 	// BatchSize flushes as soon as this many records are buffered.
 	BatchSize int
 	// FlushInterval flushes this long after the first record of a batch, so a
-	// trickle of deliveries is still recorded promptly.
+	// trickle of deliveries is still recorded promptly. Attempts are written
+	// after the delivery, so this adds nothing to delivery latency; a longer
+	// interval only trades a little lock-hold time for fewer, fuller batches.
 	FlushInterval time.Duration
 }
 
@@ -66,7 +68,7 @@ func NewAttemptWriter(
 		opts.BufferSize = max(opts.BatchSize, 8192)
 	}
 	if opts.FlushInterval <= 0 {
-		opts.FlushInterval = 5 * time.Millisecond
+		opts.FlushInterval = 20 * time.Millisecond
 	}
 	return &AttemptWriter{
 		attemptRepo: attemptRepo,

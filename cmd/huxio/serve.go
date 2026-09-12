@@ -290,6 +290,19 @@ func serve(ctx context.Context, cfg *configs.Config) error {
 
 		leaseRepo := postgres.NewLeaseRepo(store, configs.QueuePartitions)
 
+		// One payload cache per process, shared by every pool's engine: the
+		// fan-out loads a message once, and the deliver tasks it queues read the
+		// payload from memory rather than from Postgres, whichever pool they land in.
+		var messageStore dispatch.MessageStore = postgres.NewMessageStore(messageRepo)
+		if cfg.PayloadCacheMaxBytes > 0 {
+			messageStore = dispatch.NewCachingMessageStore(messageStore, dispatch.PayloadCacheOptions{
+				MaxBytes: cfg.PayloadCacheMaxBytes,
+				TTL:      cfg.PayloadCacheTTL,
+				OnHit:    metrics.PayloadCacheHits.Inc,
+				OnMiss:   metrics.PayloadCacheMisses.Inc,
+			})
+		}
+
 		pools := make([]worker.Pool, 0, len(cfg.Pools))
 		laneManagers := make([]*dispatch.LaneManager, 0, len(cfg.Pools))
 
@@ -324,7 +337,7 @@ func serve(ctx context.Context, cfg *configs.Config) error {
 			engine, err := dispatch.NewEngine(dispatch.EngineDeps{
 				TaskQueue:           queueRepo,
 				TxManager:           store,
-				MessageStore:        postgres.NewMessageStore(messageRepo),
+				MessageStore:        messageStore,
 				PayloadCodec:        codec,
 				SnapshotProvider:    configManager,
 				DeliveryClient:      client,

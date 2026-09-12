@@ -37,6 +37,12 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.LaneWaitTimeout != 2*time.Second || cfg.LaneRequeueDelay != time.Second {
 		t.Errorf("lane wait/requeue = %s/%s, want 2s/1s", cfg.LaneWaitTimeout, cfg.LaneRequeueDelay)
 	}
+	if cfg.AttemptWriterFlushInterval != 20*time.Millisecond {
+		t.Errorf("AttemptWriterFlushInterval = %s, want 20ms", cfg.AttemptWriterFlushInterval)
+	}
+	if cfg.PayloadCacheMaxBytes != 64<<20 || cfg.PayloadCacheTTL != 30*time.Second {
+		t.Errorf("payload cache = %d bytes / %s, want 64MiB / 30s", cfg.PayloadCacheMaxBytes, cfg.PayloadCacheTTL)
+	}
 }
 
 func TestLoadBuildsDSNFromParts(t *testing.T) {

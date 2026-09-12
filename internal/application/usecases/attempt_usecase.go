@@ -314,13 +314,10 @@ func (uc *AttemptUseCase) enqueueReplays(
 ) error {
 	now := time.Now().UTC()
 	tasks := make([]repositories.EnqueueTask, 0, len(deliveries))
-	partitions := make(map[int16]struct{}, len(deliveries))
 
 	for _, delivery := range deliveries {
-		partition := entities.PartitionKeyFor(delivery.EndpointID)
-		partitions[partition] = struct{}{}
 		tasks = append(tasks, repositories.EnqueueTask{
-			PartitionKey: partition,
+			PartitionKey: entities.PartitionKeyFor(delivery.EndpointID),
 			Pool:         uc.queuePool,
 			Kind:         entities.TaskDeliver,
 			OrgID:        app.OrgID,
@@ -336,10 +333,9 @@ func (uc *AttemptUseCase) enqueueReplays(
 	if err := uc.queueRepo.Enqueue(ctx, tasks); err != nil {
 		return apperrors.NewInternalError(err)
 	}
-	for partition := range partitions {
-		if err := uc.queueRepo.Notify(ctx, partition); err != nil {
-			logger.FromContext(ctx).Warn().Err(err).Msg("replay wakeup notification failed")
-		}
+	// One wakeup for every partition the replay landed in, after the insert.
+	if err := uc.queueRepo.Notify(ctx, repositories.DistinctPartitions(tasks)); err != nil {
+		logger.FromContext(ctx).Warn().Err(err).Msg("replay wakeup notification failed")
 	}
 	return nil
 }

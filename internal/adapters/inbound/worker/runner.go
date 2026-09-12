@@ -18,6 +18,7 @@ package worker
 import (
 	"context"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/plusiv/huxio/internal/application/dispatch"
@@ -217,14 +218,19 @@ func (r *Runner) listen(ctx context.Context, wakeups chan<- int16) error {
 	}
 
 	return r.deps.Notifications.Listen(ctx, r.opts.TaskChannel, func(_ context.Context, payload string) {
-		partition, err := strconv.Atoi(payload)
-		if err != nil {
-			return
-		}
-		select {
-		case wakeups <- int16(partition):
-		default:
-			// The engine is busy; the fallback poll will pick this up.
+		// One enqueue is one notification carrying every partition it touched,
+		// comma-separated. The engine drains whatever is buffered into a single
+		// claim, so handing them over one by one costs nothing.
+		for _, field := range strings.Split(payload, ",") {
+			partition, err := strconv.Atoi(field)
+			if err != nil || partition < 0 || partition >= entities.QueuePartitions {
+				continue
+			}
+			select {
+			case wakeups <- int16(partition):
+			default:
+				// The engine is busy; the fallback poll will pick this up.
+			}
 		}
 	})
 }

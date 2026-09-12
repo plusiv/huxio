@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -459,4 +460,217 @@ func claimScanRows(t *testing.T, plan []byte) float64 {
 	}
 	walk(limitNode)
 	return total
+}
+
+// TestNotifyWakesWorkersOncePerBatch pins the shape of the wakeup: one
+// notification per Notify call, carrying every partition the batch landed in.
+// It used to be a pg_notify per partition, so a fan-out to ten endpoints cost
+// ten round trips, and each one woke the engine into a claim that found
+// nothing, the first having taken the whole batch.
+//
+// The notify is a statement of its own after the enqueue's commit, not part of
+// the transaction. That is not an oversight: Postgres serializes the commit of
+// every transaction that has executed NOTIFY, and folding the wakeup into the
+// ingest and fan-out transactions measured as ~250 ms COMMITs under load. See
+// QueueRepo.Notify.
+func TestNotifyWakesWorkersOncePerBatch(t *testing.T) {
+	t.Parallel()
+	env := newTestEnv(t)
+	ctx := context.Background()
+
+	listener, err := env.Pool.Acquire(ctx)
+	if err != nil {
+		t.Fatalf("acquire listener connection: %v", err)
+	}
+	defer listener.Release()
+	if _, err := listener.Exec(ctx, `LISTEN `+postgres.TaskNotifyChannel); err != nil {
+		t.Fatalf("LISTEN: %v", err)
+	}
+	// next returns the next notification payload, or "" when none arrives in time.
+	next := func(timeout time.Duration) string {
+		waitCtx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		notification, err := listener.Conn().WaitForNotification(waitCtx)
+		if err != nil {
+			return ""
+		}
+		return notification.Payload
+	}
+
+	// Three tasks in two partitions wake each partition once, in one message.
+	tasks := []repositories.EnqueueTask{{PartitionKey: 7}, {PartitionKey: 7}, {PartitionKey: 42}}
+	if err := env.Queue.Notify(ctx, repositories.DistinctPartitions(tasks)); err != nil {
+		t.Fatalf("Notify: %v", err)
+	}
+	partitions := strings.Split(next(2*time.Second), ",")
+	sort.Strings(partitions)
+	if got := strings.Join(partitions, ","); got != "42,7" {
+		t.Errorf("notification payload = %q, want the two touched partitions", got)
+	}
+	if extra := next(300 * time.Millisecond); extra != "" {
+		t.Errorf("a second notification %q arrived; one batch must wake exactly once", extra)
+	}
+
+	// Nothing to wake is not a round trip.
+	if err := env.Queue.Notify(ctx, nil); err != nil {
+		t.Fatalf("Notify(nil): %v", err)
+	}
+	if extra := next(300 * time.Millisecond); extra != "" {
+		t.Errorf("an empty batch sent %q", extra)
+	}
+}
+
+// TestQueueClaimStaysBoundedWhenStatisticsGoStale pins the claim to a plan
+// that does not depend on the planner's opinion of the queue table.
+//
+// A healthy queue is nearly empty most of the time, so autovacuum's statistics
+// usually say "one row, many pages" (the pages are the bloat the churn leaves
+// behind). The first backlog after that is planned against those numbers. The
+// previous claim shape, UPDATE ... FROM (subquery), left the planner a join to
+// orient, and under those statistics it scanned every live row and re-ran the
+// locking subquery for each one: one claim took 2.8 s and locked 2,800 rows
+// for a LIMIT of 100, because every re-run locked a different hundred. The
+// capacity ladder showed it as Postgres CPU tripling from one step to the
+// next in one iteration out of three.
+//
+// The test builds exactly that state, then EXPLAINs the claim as a prepared
+// statement with the generic plan forced, which is what pgx settles into after
+// a handful of executions, and asserts that the lock runs once, the batch is
+// the batch, and nothing scans the heap.
+func TestQueueClaimStaysBoundedWhenStatisticsGoStale(t *testing.T) {
+	t.Parallel()
+	env := newTestEnv(t)
+	ctx := context.Background()
+
+	org := env.seedOrg(t, "Stale")
+	app := env.seedApp(t, org.ID, "customer", nil)
+
+	const (
+		fill    = 3000
+		backlog = 3000
+		limit   = 100
+	)
+	visible := time.Now().UTC().Add(-time.Second)
+	batch := func(prefix string, n int) []repositories.EnqueueTask {
+		tasks := make([]repositories.EnqueueTask, n)
+		for i := range tasks {
+			endpointID := fmt.Sprintf("ep_%s_%d", prefix, i)
+			tasks[i] = repositories.EnqueueTask{
+				PartitionKey: entities.PartitionKeyFor(endpointID),
+				Pool:         configs.DefaultPool,
+				Kind:         entities.TaskDeliver,
+				OrgID:        org.ID,
+				AppID:        app.ID,
+				MsgID:        fmt.Sprintf("msg_%s_%d", prefix, i),
+				MsgCreatedAt: visible,
+				EndpointID:   utils.Ptr(endpointID),
+				VisibleAt:    visible,
+			}
+		}
+		return tasks
+	}
+
+	// Churn: fill the heap, then complete everything but the newest row, so the
+	// heap keeps its pages while holding one live tuple, and let VACUUM ANALYZE
+	// record exactly that.
+	if err := env.Queue.Enqueue(ctx, batch("fill", fill)); err != nil {
+		t.Fatalf("Enqueue fill: %v", err)
+	}
+	if _, err := env.Pool.Exec(ctx, `DELETE FROM delivery_task WHERE id < (SELECT max(id) FROM delivery_task)`); err != nil {
+		t.Fatalf("drain: %v", err)
+	}
+	if _, err := env.Pool.Exec(ctx, `VACUUM ANALYZE delivery_task`); err != nil {
+		t.Fatalf("VACUUM ANALYZE: %v", err)
+	}
+	var reltuples float64
+	var relpages int
+	if err := env.Pool.QueryRow(ctx, `SELECT reltuples, relpages FROM pg_class WHERE relname = 'delivery_task'`).Scan(&reltuples, &relpages); err != nil {
+		t.Fatalf("read statistics: %v", err)
+	}
+	if reltuples > 5 || relpages < 10 {
+		t.Fatalf("did not reproduce the stale state: reltuples=%.0f relpages=%d, want ~1 row across many pages", reltuples, relpages)
+	}
+
+	// The backlog the statistics know nothing about.
+	if err := env.Queue.Enqueue(ctx, batch("backlog", backlog)); err != nil {
+		t.Fatalf("Enqueue backlog: %v", err)
+	}
+
+	// The real claim, through the repository, must return the batch and no more.
+	tasks, err := env.Queue.Claim(ctx, repositories.ClaimRequest{
+		Pool: configs.DefaultPool, Partitions: allPartitions(), OwnerID: "wkr_stale", LockTTL: 90 * time.Second, Limit: limit,
+	})
+	if err != nil {
+		t.Fatalf("Claim: %v", err)
+	}
+	if len(tasks) != limit {
+		t.Fatalf("claimed %d tasks for a limit of %d", len(tasks), limit)
+	}
+
+	// Now the plan itself, generic, as the statement cache will run it.
+	tx, err := env.Pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("Begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `SET LOCAL plan_cache_mode = force_generic_plan`); err != nil {
+		t.Fatalf("force generic plan: %v", err)
+	}
+	if _, err := tx.Exec(ctx, `PREPARE claim_probe(text, float8, text, smallint[], int) AS `+postgres.ClaimQuery); err != nil {
+		t.Fatalf("PREPARE the claim: %v", err)
+	}
+	partitions := make([]string, entities.QueuePartitions)
+	for i := range partitions {
+		partitions[i] = fmt.Sprint(i)
+	}
+	var plan []byte
+	err = tx.QueryRow(ctx, fmt.Sprintf(
+		`EXPLAIN (ANALYZE, FORMAT JSON) EXECUTE claim_probe('wkr_probe', 90, '%s', '{%s}', %d)`,
+		configs.DefaultPool, strings.Join(partitions, ","), limit,
+	)).Scan(&plan)
+	if err != nil {
+		t.Fatalf("EXPLAIN the claim: %v", err)
+	}
+
+	nodes := planNodes(t, plan)
+	for _, node := range nodes {
+		nodeType, _ := node["Node Type"].(string)
+		loops, _ := node["Actual Loops"].(float64)
+		if nodeType == "LockRows" && loops != 1 {
+			t.Errorf("the locking select ran %.0f times in one claim; it must run once\nplan: %s", loops, plan)
+		}
+		if nodeType == "Seq Scan" {
+			t.Errorf("the claim scanned the heap; it must stay on the indexes whatever the statistics say\nplan: %s", plan)
+		}
+	}
+	if updated, _ := nodes[0]["Actual Rows"].(float64); updated != limit {
+		t.Errorf("the claim updated %.0f rows for a limit of %d\nplan: %s", updated, limit, plan)
+	}
+}
+
+// planNodes flattens an EXPLAIN (FORMAT JSON) plan into its nodes, root first.
+func planNodes(t *testing.T, plan []byte) []map[string]any {
+	t.Helper()
+	var parsed []struct {
+		Plan map[string]any `json:"Plan"`
+	}
+	if err := json.Unmarshal(plan, &parsed); err != nil {
+		t.Fatalf("parse the plan: %v", err)
+	}
+	if len(parsed) == 0 {
+		t.Fatal("EXPLAIN returned no plan")
+	}
+	var nodes []map[string]any
+	var walk func(node map[string]any)
+	walk = func(node map[string]any) {
+		nodes = append(nodes, node)
+		raw, _ := node["Plans"].([]any)
+		for _, child := range raw {
+			if m, ok := child.(map[string]any); ok {
+				walk(m)
+			}
+		}
+	}
+	walk(parsed[0].Plan)
+	return nodes
 }

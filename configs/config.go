@@ -92,6 +92,9 @@ type Config struct {
 	AttemptWriterFlushInterval time.Duration
 	AttemptBodyLimitBytes      int
 
+	PayloadCacheMaxBytes int64
+	PayloadCacheTTL      time.Duration
+
 	RetentionMessagesDays int
 	RetentionAttemptsDays int
 	PartitionsAheadDays   int
@@ -166,8 +169,11 @@ type envVars struct {
 
 	AttemptWriterBufferSize    int           `default:"8192" split_words:"true"`
 	AttemptWriterBatchSize     int           `default:"500"  split_words:"true"`
-	AttemptWriterFlushInterval time.Duration `default:"5ms"  split_words:"true"`
+	AttemptWriterFlushInterval time.Duration `default:"20ms" split_words:"true"`
 	AttemptBodyLimitBytes      int           `default:"8192" split_words:"true"`
+
+	PayloadCacheMaxBytes int64         `default:"67108864" split_words:"true"`
+	PayloadCacheTTL      time.Duration `default:"30s"      split_words:"true"`
 
 	RetentionMessagesDays int `default:"90" split_words:"true"`
 	RetentionAttemptsDays int `default:"90" split_words:"true"`
@@ -290,6 +296,9 @@ func Load() (*Config, error) {
 		AttemptWriterFlushInterval: env.AttemptWriterFlushInterval,
 		AttemptBodyLimitBytes:      env.AttemptBodyLimitBytes,
 
+		PayloadCacheMaxBytes: env.PayloadCacheMaxBytes,
+		PayloadCacheTTL:      env.PayloadCacheTTL,
+
 		RetentionMessagesDays: env.RetentionMessagesDays,
 		RetentionAttemptsDays: env.RetentionAttemptsDays,
 		PartitionsAheadDays:   env.PartitionsAheadDays,
@@ -340,6 +349,12 @@ func (c *Config) Validate() error {
 	}
 	if c.AttemptWriterBatchSize <= 0 || c.AttemptWriterBufferSize < c.AttemptWriterBatchSize {
 		return eris.New("configs: attempt writer buffer must be at least the batch size")
+	}
+	if c.PayloadCacheMaxBytes < 0 {
+		return eris.New("configs: HUXIO_PAYLOAD_CACHE_MAX_BYTES must not be negative; 0 disables the cache")
+	}
+	if c.PayloadCacheMaxBytes > 0 && c.PayloadCacheTTL <= 0 {
+		return eris.New("configs: HUXIO_PAYLOAD_CACHE_TTL must be positive while the payload cache is enabled")
 	}
 	if c.RetentionMessagesDays <= 0 || c.RetentionAttemptsDays <= 0 {
 		return eris.New("configs: retention windows must be positive")

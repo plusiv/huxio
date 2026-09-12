@@ -107,13 +107,13 @@ func (f *fakeQueue) Enqueue(_ context.Context, tasks []repositories.EnqueueTask)
 	return nil
 }
 
-func (f *fakeQueue) Notify(_ context.Context, partitionKey int16) error {
+func (f *fakeQueue) Notify(_ context.Context, partitionKeys []int16) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.notifyErr != nil {
 		return f.notifyErr
 	}
-	f.notified = append(f.notified, partitionKey)
+	f.notified = append(f.notified, partitionKeys...)
 	return nil
 }
 

@@ -21,7 +21,9 @@ func NewMessageStore(messages repositories.MessageRepository) *MessageStore {
 	return &MessageStore{messages: messages}
 }
 
-// LoadMessage reads one message without its payload.
+// LoadMessage reads one message, payload included: the fan-out is the one
+// caller, and the payload it reads here seeds the per-process cache that the
+// deliver tasks it queues then read from.
 func (s *MessageStore) LoadMessage(ctx context.Context, id string, createdAt time.Time) (*entities.Message, error) {
 	day := createdAt.UTC().Truncate(24 * time.Hour)
 	nextDay := day.AddDate(0, 0, 1)

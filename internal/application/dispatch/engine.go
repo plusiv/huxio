@@ -238,20 +238,50 @@ func (e *Engine) Run(ctx context.Context, wakeups <-chan int16) error {
 			}
 		}
 
+		// Wait for a reason to claim again: the poll tick, or a wakeup for a
+		// partition this worker owns. Anything else keeps waiting, so it never
+		// costs a claim query.
+	wait:
+		for {
+			select {
+			case <-ctx.Done():
+				return e.drain(log)
+			case <-ticker.C:
+				break wait
+			case partition, ok := <-wakeups:
+				if !ok {
+					wakeups = nil
+					continue
+				}
+				// One claim covers every partition this worker owns, so a burst of
+				// wakeups collapses into one query: a fan-out notifies for every
+				// partition it expanded into, and a busy API notifies once per
+				// message. Draining happens before the claim, not after, so a wakeup
+				// that lands during the claim, for a row the claim's snapshot could
+				// not see, is still there to trigger the next one.
+				if e.drainWakeups(wakeups, e.owns(partition)) {
+					break wait
+				}
+			}
+		}
+	}
+}
+
+// drainWakeups empties whatever is buffered on the wakeup channel without
+// blocking, and reports whether any drained wakeup, or the one already taken
+// (owned), is for a partition this worker owns.
+func (e *Engine) drainWakeups(wakeups <-chan int16, owned bool) bool {
+	for {
 		select {
-		case <-ctx.Done():
-			return e.drain(log)
-		case <-ticker.C:
 		case partition, ok := <-wakeups:
 			if !ok {
-				wakeups = nil
-				continue
+				return owned
 			}
-			// A notification for a partition this worker does not own is not worth a
-			// claim query.
-			if !e.owns(partition) {
-				continue
+			if e.owns(partition) {
+				owned = true
 			}
+		default:
+			return owned
 		}
 	}
 }
@@ -457,13 +487,10 @@ func (e *Engine) handleFanout(ctx context.Context, task entities.DeliveryTask) {
 	}
 
 	tasks := make([]repositories.EnqueueTask, 0, len(endpoints))
-	partitions := make(map[int16]struct{}, len(endpoints))
 	now := time.Now().UTC()
 	for _, ep := range endpoints {
-		partition := entities.PartitionKeyFor(ep.ID)
-		partitions[partition] = struct{}{}
 		tasks = append(tasks, repositories.EnqueueTask{
-			PartitionKey: partition,
+			PartitionKey: entities.PartitionKeyFor(ep.ID),
 			Pool:         utils.Fallback(ep.Pool, e.opts.Pool),
 			Kind:         entities.TaskDeliver,
 			OrgID:        task.OrgID,
@@ -487,12 +514,13 @@ func (e *Engine) handleFanout(ctx context.Context, task entities.DeliveryTask) {
 		return
 	}
 
-	log.Debug().Int("endpoints", len(tasks)).Msg("fanned out")
-	for partition := range partitions {
-		if err := e.taskQueue.Notify(ctx, partition); err != nil {
-			log.Warn().Err(err).Int16("partition_key", partition).Msg("fan-out wakeup failed")
-		}
+	// One wakeup for every partition the expansion landed in, after the commit
+	// and never inside it: the queue's Notify explains why. Best effort, the
+	// owners also poll.
+	if err := e.taskQueue.Notify(ctx, repositories.DistinctPartitions(tasks)); err != nil {
+		log.Warn().Err(err).Msg("fan-out wakeup failed")
 	}
+	log.Debug().Int("endpoints", len(tasks)).Msg("fanned out")
 }
 
 // handleDeliver signs and sends one message to one endpoint, records the

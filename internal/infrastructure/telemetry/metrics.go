@@ -41,6 +41,8 @@ type Metrics struct {
 	HTTPConnReusedRatio  prometheus.Gauge
 	DNSCacheHits         prometheus.Counter
 	DNSCacheMisses       prometheus.Counter
+	PayloadCacheHits     prometheus.Counter
+	PayloadCacheMisses   prometheus.Counter
 	PartitionLeasesOwned prometheus.Gauge
 	ConfigSnapshotAge    prometheus.Gauge
 	APIRequestDuration   *prometheus.HistogramVec
@@ -152,6 +154,18 @@ func New() *Metrics {
 			Help:      "Resolver lookups served from the in-process DNS cache.",
 		}),
 
+		PayloadCacheHits: prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: Namespace,
+			Name:      "payload_cache_hits_total",
+			Help:      "Delivery payload reads served from the in-process cache the fan-out seeds.",
+		}),
+
+		PayloadCacheMisses: prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: Namespace,
+			Name:      "payload_cache_misses_total",
+			Help:      "Delivery payload reads that went to Postgres.",
+		}),
+
 		DNSCacheMisses: prometheus.NewCounter(prometheus.CounterOpts{
 			Namespace: Namespace,
 			Name:      "dns_cache_misses_total",
@@ -195,6 +209,8 @@ func New() *Metrics {
 		m.HTTPConnReusedRatio,
 		m.DNSCacheHits,
 		m.DNSCacheMisses,
+		m.PayloadCacheHits,
+		m.PayloadCacheMisses,
 		m.PartitionLeasesOwned,
 		m.ConfigSnapshotAge,
 		m.APIRequestDuration,

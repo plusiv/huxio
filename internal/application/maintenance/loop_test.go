@@ -100,7 +100,7 @@ func (q *fakeQueue) Retry(context.Context, int64, time.Duration) error         {
 func (q *fakeQueue) Defer(context.Context, int64, time.Duration) error         { return nil }
 func (q *fakeQueue) Release(context.Context, []int64) error                    { return nil }
 func (q *fakeQueue) Enqueue(context.Context, []repositories.EnqueueTask) error { return nil }
-func (q *fakeQueue) Notify(context.Context, int16) error                       { return nil }
+func (q *fakeQueue) Notify(context.Context, []int16) error                     { return nil }
 
 func (q *fakeQueue) RescueStuck(context.Context) (int64, error) {
 	q.rescues.Add(1)

@@ -108,11 +108,17 @@ func (q *fakeQueue) Enqueue(_ context.Context, tasks []repositories.EnqueueTask)
 	return nil
 }
 
-func (q *fakeQueue) Notify(_ context.Context, partitionKey int16) error {
+func (q *fakeQueue) Notify(_ context.Context, partitionKeys []int16) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	q.notified = append(q.notified, partitionKey)
+	q.notified = append(q.notified, partitionKeys...)
 	return nil
+}
+
+func (q *fakeQueue) claimCount() int {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.claims
 }
 
 func (q *fakeQueue) snapshotState() (completed []int64, retried map[int64]time.Duration, enqueued []repositories.EnqueueTask, notified []int16) {

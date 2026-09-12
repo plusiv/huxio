@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/plusiv/huxio/internal/domain/entities"
@@ -11,7 +12,9 @@ import (
 )
 
 // TaskNotifyChannel is the LISTEN/NOTIFY channel workers wake on. The payload
-// is the partition key, so a worker only wakes for partitions it owns.
+// is the comma-separated list of partition keys one enqueue touched, so a
+// worker only wakes for partitions it owns, and a fan-out to many endpoints is
+// one notification rather than one per endpoint.
 const TaskNotifyChannel = "huxio_task"
 
 // QueueRepo is the Postgres implementation of repositories.QueueRepository.
@@ -27,12 +30,20 @@ func NewQueueRepo(store *Store) *QueueRepo { return &QueueRepo{store: store} }
 // ClaimQuery locks a batch of ready tasks for the owned partitions and hands
 // them back in the same round trip. The shape is worth reading closely:
 //
-//   - the inner SELECT ... FOR UPDATE SKIP LOCKED is what makes this a queue.
+//   - the SELECT ... FOR UPDATE SKIP LOCKED is what makes this a queue.
 //     Without SKIP LOCKED, two workers claiming at once would block on each
 //     other's rows instead of taking different ones.
-//   - the UPDATE ... FROM (subquery) marks the rows locked and RETURNINGs
-//     them together, so claiming costs one statement, not a select then an
-//     update with a race in between.
+//   - it runs inside ARRAY(...), so it is an InitPlan: evaluated exactly once,
+//     whatever the planner thinks of the table, and the UPDATE is then a
+//     primary-key lookup on the ids it produced. The previous shape, UPDATE ...
+//     FROM (subquery), left the planner a join to orient, and it got that
+//     wrong whenever autovacuum had last seen the queue nearly empty (which a
+//     healthy queue is, most of the time): with statistics saying one row and
+//     a real backlog underneath, it scanned every live row and re-ran the
+//     locking subquery for each one. Measured: 2.8 s for one claim, and 2,800
+//     rows locked for a LIMIT of 100, because each re-run locked a different
+//     hundred. With ARRAY there is no join, so there is no orientation to get
+//     wrong; the plan is the same under stale and fresh statistics.
 //   - partition_key = ANY(...) restricts each worker to the partitions it
 //     leases. Two workers therefore never look at the same rows, and
 //     SKIP LOCKED almost never has to skip anything.
@@ -51,7 +62,7 @@ const ClaimQuery = `
 	UPDATE delivery_task t
 	SET    locked_by = $1,
 	       locked_until = now() + ($2 * interval '1 second')
-	FROM (
+	WHERE  t.id = ANY(ARRAY(
 	    SELECT id
 	    FROM   delivery_task
 	    WHERE  pool = $3
@@ -62,8 +73,7 @@ const ClaimQuery = `
 	    ORDER  BY visible_at, id
 	    LIMIT  $5
 	    FOR UPDATE SKIP LOCKED
-	) s
-	WHERE t.id = s.id
+	))
 	RETURNING t.id, t.partition_key, t.pool, t.kind, t.org_id, t.app_id, t.msg_id,
 	          t.msg_created_at, t.endpoint_id, t.attempt, t.trigger_type, t.visible_at,
 	          t.locked_by, t.locked_until, t.created_at`
@@ -175,7 +185,8 @@ func (r *QueueRepo) Release(ctx context.Context, ids []int64) error {
 
 // Enqueue inserts tasks in a single round trip. When called with a context
 // carrying a transaction it joins it, which is how the message insert and the
-// queue insert commit together.
+// queue insert commit together. It sends no wakeup; see Notify for why that
+// must happen after the commit rather than inside it.
 func (r *QueueRepo) Enqueue(ctx context.Context, tasks []repositories.EnqueueTask) error {
 	if len(tasks) == 0 {
 		return nil
@@ -230,11 +241,31 @@ func (r *QueueRepo) Enqueue(ctx context.Context, tasks []repositories.EnqueueTas
 	return nil
 }
 
-// Notify wakes workers listening for a partition. Workers keep a fallback poll
-// as well, because notifications are lost on connection loss.
-func (r *QueueRepo) Notify(ctx context.Context, partitionKey int16) error {
+// Notify wakes the workers for a set of partitions with one notification whose
+// payload is the comma-separated partition keys, so a fan-out to ten endpoints
+// is one round trip rather than ten. Workers keep a fallback poll as well,
+// because notifications are lost on connection loss.
+//
+// It runs as its own statement after the caller's commit, never inside the
+// transaction, and that is deliberate. Postgres serializes the commit of every
+// transaction that has executed NOTIFY: PreCommit_Notify in async.c takes an
+// AccessExclusiveLock on "database 0" and holds it until the commit, WAL flush
+// included, is done. With the notify folded into the ingest and fan-out
+// transactions, every enqueue on every connection committed one at a time
+// behind a single fsync, which measured as ~250 ms COMMITs and a 1.4 s
+// delivery p99 at 800 msg/s where the same build without it sat at 26 ms.
+// A notify-only autocommit statement assigns no XID and writes no WAL, so it
+// holds that lock for microseconds.
+func (r *QueueRepo) Notify(ctx context.Context, partitionKeys []int16) error {
+	if len(partitionKeys) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(partitionKeys))
+	for _, key := range partitionKeys {
+		keys = append(keys, strconv.Itoa(int(key)))
+	}
 	const query = `SELECT pg_notify($1, $2)`
-	if _, err := r.store.Querier(ctx).Exec(ctx, query, TaskNotifyChannel, strconv.Itoa(int(partitionKey))); err != nil {
+	if _, err := r.store.Querier(ctx).Exec(ctx, query, TaskNotifyChannel, strings.Join(keys, ",")); err != nil {
 		return eris.Wrap(err, "notify task")
 	}
 	return nil

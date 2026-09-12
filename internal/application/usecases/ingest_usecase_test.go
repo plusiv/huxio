@@ -304,7 +304,8 @@ func TestIngestDoesNotAcknowledgeWhenCommitFails(t *testing.T) {
 	if !eris.As(err, &appErr) || appErr.Kind != apperrors.KindInternal {
 		t.Fatalf("error = %v, want an internal error", err)
 	}
-	// Durability before acknowledgement: no 202 without a commit.
+	// Durability before acknowledgement: no 202 without a commit, and no wakeup
+	// for rows that were never committed.
 	if got := f.queue.notifications(); len(got) != 0 {
 		t.Error("a failed commit must not send a wakeup")
 	}
