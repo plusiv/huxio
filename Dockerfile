@@ -3,7 +3,7 @@
 # Build stage
 FROM golang:1.26-alpine AS build
 WORKDIR /src
-RUN apk add --no-cache git ca-certificates
+RUN apk add --no-cache ca-certificates
 
 # Pinned so the cache mounts below cannot miss their target if a base image
 # moves GOPATH or HOME.
@@ -25,7 +25,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 # Runtime stage: one static binary, and Postgres is the only thing it needs.
 FROM alpine:3.21
-RUN apk add --no-cache ca-certificates tzdata && adduser -D -u 10001 huxio
+RUN apk add --no-cache ca-certificates && adduser -D -u 10001 huxio
 COPY --from=build /out/huxio /usr/local/bin/huxio
 USER huxio
 EXPOSE 8080

@@ -3,9 +3,12 @@
 // generation and the benchmark harness.
 package main
 
+// TZ in a deployment makes time.Local need the zone database, which the
+// runtime image no longer installs.
 import (
 	"fmt"
 	"os"
+	_ "time/tzdata"
 
 	_ "go.uber.org/automaxprocs" // honour cgroup CPU limits
 )
