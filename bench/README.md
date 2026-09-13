@@ -1,7 +1,7 @@
 # bench
 
-The measuring equipment. `docs/06-performance.md` calls this milestone zero:
-a benchmark a skeptic can reproduce is worth more than any number in a README.
+The measuring equipment, and milestone zero: a benchmark a skeptic can
+reproduce is worth more than any number in a README.
 
 ## Running it
 
