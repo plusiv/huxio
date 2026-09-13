@@ -1,6 +1,35 @@
 .git
 .github
-bench/results
-deploy/grafana/data
 docs
 *.md
+
+# Holds the two required secrets. Never reaches the final image, but an
+# unignored copy lands in the build stage's cached layer.
+.env
+.env.*
+
+# Build and test output.
+bin/
+out/
+dist/
+coverage.out
+coverage.html
+*.test
+*.prof
+*.pprof
+
+# bench/ itself stays: cmd/huxio imports bench/harness.
+tests/
+bench/results
+deploy/grafana/data
+
+# Internal-only comparison tooling.
+bench/compare
+cmd/benchcompare
+
+# Editor and agent state.
+.claude
+.cursor
+.vscode
+.idea
+.DS_Store
