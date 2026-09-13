@@ -42,8 +42,8 @@ type LaneOptions struct {
 // best-effort: a failing endpoint consumes a bounded, dedicated slice of
 // capacity and physically cannot consume more.
 //
-// A lane is owned by exactly one worker at a time, which is what lets this
-// state live in local memory and cost nothing to read.
+// A lane is owned by exactly one worker at a time, so its state lives only
+// in that worker's local memory.
 type Lane struct {
 	endpointID string
 	opts       LaneOptions

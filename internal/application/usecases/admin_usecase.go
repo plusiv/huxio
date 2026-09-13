@@ -68,8 +68,7 @@ func (uc *AdminUseCase) QueueStats(ctx context.Context, pools []string) ([]repos
 	return stats, nil
 }
 
-// PartitionLeases returns the lease table, which is the whole point of using
-// a table for ownership: you can look at it.
+// PartitionLeases returns the current lease table for a pool.
 func (uc *AdminUseCase) PartitionLeases(ctx context.Context, pool string) ([]entities.PartitionLease, error) {
 	leases, err := uc.leaseRepo.ListPartitionLeases(ctx, pool)
 	if err != nil {

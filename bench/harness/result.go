@@ -34,8 +34,8 @@ type Result struct {
 	Queue    QueueStats    `json:"queue"`
 	Runtime  RuntimeStats  `json:"runtime"`
 
-	// Tenants holds the per-tenant latency picture, which is the whole point:
-	// a global p99 hides exactly the failure this system exists to avoid.
+	// Tenants holds the per-tenant latency picture. A global p99 does not
+	// surface a single tenant's degradation.
 	Tenants []TenantStats `json:"tenants"`
 
 	Pass   bool   `json:"pass"`

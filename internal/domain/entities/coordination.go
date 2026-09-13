@@ -3,8 +3,7 @@ package entities
 import "time"
 
 // PartitionLease records which worker currently owns which queue partition,
-// per pool. Ownership is what allows per-endpoint state to live in one
-// worker's memory instead of a shared cache.
+// per pool. Per-endpoint state lives in the owning worker's memory.
 type PartitionLease struct {
 	PartitionKey int16
 	Pool         string
@@ -30,8 +29,8 @@ type NamedLease struct {
 	CreatedAt   time.Time
 }
 
-// Worker is a live process and the pools it serves, so each worker can work
-// out its fair share of partitions without an external coordination service.
+// Worker is a live process and the pools it serves. Workers use the registry
+// to compute their fair share of partitions.
 type Worker struct {
 	ID          string
 	Pools       []string

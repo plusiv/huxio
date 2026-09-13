@@ -15,8 +15,8 @@ import (
 const TaskNotifyChannel = "huxio_task"
 
 // QueueRepo is the Postgres implementation of repositories.QueueRepository.
-// Keeping the queue in the same database as the message is what removes the
-// dual-write failure class entirely.
+// The queue and the message commit in the same transaction, in the same
+// database.
 type QueueRepo struct {
 	store *Store
 }

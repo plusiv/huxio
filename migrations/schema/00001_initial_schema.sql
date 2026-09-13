@@ -2,10 +2,8 @@
 -- +goose StatementBegin
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- Configuration tables: small, read constantly, cached in memory by every
--- process rather than queried on the delivery path.
--- Small, rarely written, loaded into process memory in full. Nothing on the
--- delivery path queries these.
+-- Configuration tables: small, rarely written, loaded into process memory in
+-- full. Nothing on the delivery path queries these directly.
 -- ─────────────────────────────────────────────────────────────────────────────
 
 CREATE TABLE organization (
@@ -181,8 +179,7 @@ COMMENT ON COLUMN delivery_attempt.trigger_type IS
   '0 scheduled, 1 manual resend, 2 bulk replay. Manual and bulk attempts are not retried on failure.';
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- Queue table. Postgres is the queue: one fewer moving part than a broker,
--- and it lets a message and its queue row commit in the same transaction.
+-- Queue table. A message and its queue row commit in the same transaction.
 -- Rows are physically deleted as work completes, so the table drains rather
 -- than accumulating.
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -214,9 +211,8 @@ CREATE INDEX task_stuck_idx
     ON delivery_task (locked_until)
     WHERE locked_until IS NOT NULL;
 
--- Bloat is how a Postgres-backed queue dies: every claim UPDATEs a row, and
--- default autovacuum thresholds scale with table size, so a hot queue table
--- never reaches them. These settings are not optional.
+-- Every claim UPDATEs a row. Default autovacuum thresholds scale with table
+-- size, so a hot queue table never crosses them.
 ALTER TABLE delivery_task SET (
     autovacuum_vacuum_scale_factor  = 0.01,
     autovacuum_vacuum_cost_delay    = 0,
@@ -224,9 +220,9 @@ ALTER TABLE delivery_task SET (
 );
 
 COMMENT ON TABLE delivery_task IS
-  'The work queue. One row per unit of pending work. Unlike every other table here, rows are physically deleted as work completes, because the queue must drain rather than accumulate.';
+  'The work queue. One row per unit of pending work, physically deleted as it completes.';
 COMMENT ON COLUMN delivery_task.partition_key IS
-  'crc32 of the routing id modulo 256. Decides which worker handles this task, which is what lets rate limits and circuit breakers live in worker memory.';
+  'crc32 of the routing id modulo 256. Decides which worker handles this task; rate limits and circuit breakers are keyed off this assignment and live in worker memory.';
 COMMENT ON COLUMN delivery_task.kind IS
   '0 fanout (expand one message into one task per matching endpoint), 1 deliver (send to one endpoint).';
 COMMENT ON COLUMN delivery_task.visible_at IS
@@ -237,8 +233,8 @@ COMMENT ON COLUMN delivery_task.deleted_at IS
   'Present for schema uniformity only. Completed tasks are removed with DELETE so the table stays small; a soft-deleted queue would defeat the point.';
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- Coordination tables. Workers agree on who owns what through Postgres, so
--- there is no ZooKeeper or etcd to run alongside it.
+-- Coordination tables: partition ownership and singleton locks, held as rows
+-- in Postgres.
 -- ─────────────────────────────────────────────────────────────────────────────
 
 CREATE TABLE partition_lease (
@@ -254,7 +250,7 @@ CREATE TABLE partition_lease (
 CREATE INDEX partition_lease_owner_idx ON partition_lease (pool, owner_id);
 
 COMMENT ON TABLE partition_lease IS
-  'Which worker currently owns which queue partition, per pool. Ownership is what allows per-endpoint state to live in one worker''s memory instead of a shared cache.';
+  'Which worker currently owns which queue partition, per pool. Per-endpoint state lives in the owning worker''s memory, keyed by this ownership.';
 COMMENT ON COLUMN partition_lease.heartbeat_at IS
   'Last time the owner said it was alive. A lease older than the TTL is free for anyone to claim.';
 
@@ -281,7 +277,7 @@ CREATE TABLE worker_registry (
 CREATE INDEX worker_registry_heartbeat_idx ON worker_registry (heartbeat_at);
 
 COMMENT ON TABLE worker_registry IS
-  'Currently live workers and the pools they serve, so each can work out its fair share of partitions without any external coordination service.';
+  'Currently live workers and the pools they serve. Workers read this table to compute their fair share of partitions.';
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Idempotency: a retried POST /msg must not create a second message.

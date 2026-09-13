@@ -26,11 +26,8 @@ type LeaseManagerOptions struct {
 }
 
 // LeaseManager keeps this worker's fair share of queue partitions leased.
-//
-// Workers own partitions rather than endpoints: 256 fixed partitions
-// distribute evenly across any realistic worker count, a rebalance is a row
-// update rather than a ring recomputation, and the whole thing is debuggable
-// with a SELECT.
+// Workers own partitions rather than endpoints: there are 256 fixed
+// partitions, and a rebalance is a row update.
 type LeaseManager struct {
 	leaseRepo       repositories.LeaseRepository
 	ownedPartitions *AtomicPartitions
