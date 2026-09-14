@@ -2,6 +2,9 @@ package http_test
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v5"
@@ -71,6 +74,46 @@ func TestNoStaleRouteDocs(t *testing.T) {
 	}
 	if len(stale) > 0 {
 		t.Errorf("documented routes that are not registered: %v", stale)
+	}
+}
+
+// TestSpecIsServed covers the route clients actually read the spec from. It
+// takes no token: an SDK has to be able to fetch it before it has one.
+func TestSpecIsServed(t *testing.T) {
+	t.Parallel()
+
+	recorder := httptest.NewRecorder()
+	specRouter().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/v1/openapi.json", nil))
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body %s)", recorder.Code, recorder.Body)
+	}
+	if got := recorder.Header().Get("Content-Type"); !strings.HasPrefix(got, "application/json") {
+		t.Errorf("content type = %q", got)
+	}
+
+	var document struct {
+		OpenAPI string              `json:"openapi"`
+		Servers []map[string]string `json:"servers"`
+		Paths   map[string]any      `json:"paths"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &document); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if document.OpenAPI != "3.0.3" {
+		t.Errorf("openapi = %q", document.OpenAPI)
+	}
+	// Relative, so the document stays right whatever hostname it is reached by.
+	if len(document.Servers) != 1 || document.Servers[0]["url"] != "/" {
+		t.Errorf("servers = %v, want a single relative entry", document.Servers)
+	}
+	// The document has to describe the route it was fetched from, or a client
+	// generated off it cannot refresh the spec.
+	if _, ok := document.Paths["/api/v1/openapi.json"]; !ok {
+		t.Error("the document does not describe its own route")
+	}
+	if _, ok := document.Paths["/api/v1/app/:app_id/msg"]; !ok {
+		t.Error("the served document is missing the ingest route")
 	}
 }
 

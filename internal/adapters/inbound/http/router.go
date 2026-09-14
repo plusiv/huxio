@@ -4,6 +4,7 @@ package http
 
 import (
 	"net/http"
+	"sync"
 
 	"github.com/labstack/echo/v5"
 	echomiddleware "github.com/labstack/echo/v5/middleware"
@@ -24,6 +25,8 @@ const bodyLimitHeadroom = 16 << 10
 
 // RouterConfig carries the transport-level settings.
 type RouterConfig struct {
+	// Version is the build version, reported as the OpenAPI document's version.
+	Version          string
 	MaxPayloadBytes  int64
 	CORSAllowOrigins []string
 	// RateLimitOrgRPS and RateLimitAppRPS are cluster-wide limits, divided
@@ -144,6 +147,11 @@ func NewRouter(deps RouterDeps) *echo.Echo {
 	// Unauthenticated operational routes.
 	registerTelemetryRoutes(e, api, deps.Metrics, deps.HealthHandler)
 
+	// Served rather than shipped as a file, so a client reads the spec off the
+	// deployment it is talking to instead of a document generated from some
+	// other build.
+	api.GET("/openapi.json", specHandler(e, deps.Config.Version))
+
 	// Everything below requires a bearer token. The rate limiter comes after
 	// auth because it is keyed by tenant, and the idempotency middleware sits
 	// in front of the routes rather than inside handlers because the key is
@@ -261,6 +269,35 @@ func registerPortal(e *echo.Echo, deps RouterDeps) {
 	group.POST("/endpoints/:endpoint_id/test", deps.PortalUI.TestEvent)
 	group.POST("/endpoints/:endpoint_id/resend", deps.PortalUI.Resend)
 	group.POST("/endpoints/:endpoint_id/recover", deps.PortalUI.Recover)
+}
+
+// SpecInfo is the document's identity. The served route and the generated
+// file both call it, so the two cannot describe different products.
+func SpecInfo(version string) openapi.Info {
+	return openapi.Info{
+		Title:   "huxio",
+		Version: version,
+		Description: "Self-hosted webhook delivery. The surface mirrors the incumbent's REST API, " +
+			"so its client SDKs work unmodified; additions live on their own paths.",
+	}
+}
+
+// specHandler serves the document for this deployment. It is built on the
+// first request and kept: the route table is fixed once NewRouter returns.
+// The server URL is relative, which stays correct behind any proxy or
+// hostname the deployment is reached by.
+func specHandler(e *echo.Echo, version string) echo.HandlerFunc {
+	build := sync.OnceValues(func() ([]byte, error) {
+		return Spec(e, SpecInfo(version), []openapi.Server{{URL: "/", Description: "This deployment"}}).JSON()
+	})
+
+	return func(c *echo.Context) error {
+		document, err := build()
+		if err != nil {
+			return err
+		}
+		return c.Blob(http.StatusOK, echo.MIMEApplicationJSON, document)
+	}
 }
 
 // Spec generates the OpenAPI document from the routes actually registered on

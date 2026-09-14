@@ -93,7 +93,6 @@ export HUXIO_DATABASE_URL='postgres://postgres:postgres@localhost:5432/huxio?ssl
 export HUXIO_ENCRYPTION_KEY="$(go run ./cmd/huxio keygen)"
 export HUXIO_JWT_SECRET='change-me'
 
-go run ./cmd/huxio migrate up
 go run ./cmd/huxio serve --role=all
 ```
 
@@ -201,7 +200,8 @@ records, deregister.
 
 ## API
 
-Full OpenAPI document: `make openapi`. The shape:
+Every API node serves its own OpenAPI document at `GET /api/v1/openapi.json`,
+generated from the routes that node registers. The shape:
 
 | | |
 | --- | --- |
@@ -279,7 +279,8 @@ the retry policy, the signer and the entire delivery engine are testable with no
 Postgres and no network.
 
 ```
-cmd/huxio/              CLI: serve, migrate, jwt, keygen, org, openapi, bench
+cmd/huxio/              CLI: serve, jwt, keygen, org
+cmd/huxio-dev/          development tooling: migrate, openapi, bench
 internal/domain/        entities, repository ports, signing, retry policy
 internal/application/   use cases, delivery engine, config snapshot, maintenance
 internal/adapters/       HTTP (Echo) and worker inbound; Postgres and HTTP outbound

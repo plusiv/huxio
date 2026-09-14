@@ -19,13 +19,16 @@ func newOpenAPICmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "openapi",
-		Short: "Print the OpenAPI document for the HTTP API",
+		Short: "Write the OpenAPI document to a file",
 		Long: "The document is generated from the routes the server actually registers and\n" +
-			"the payload types the binder validates, so it cannot drift from the API.",
+			"the payload types the binder validates, so it cannot drift from the API.\n\n" +
+			"A running API node serves the same document at /api/v1/openapi.json. This\n" +
+			"command exists for the checked-in copy, which needs an absolute server URL.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			// A router with no dependencies is enough: only the route table and the
 			// payload types are read, never a handler.
 			router := inboundhttp.NewRouter(inboundhttp.RouterDeps{
+				Config:             inboundhttp.RouterConfig{Version: version},
 				Metrics:            telemetry.New(),
 				HealthHandler:      &handlers.HealthHandler{},
 				ApplicationHandler: &handlers.ApplicationHandler{},
@@ -38,12 +41,8 @@ func newOpenAPICmd() *cobra.Command {
 				StreamHandler:      &handlers.StreamHandler{},
 			})
 
-			document := inboundhttp.Spec(router, openapi.Info{
-				Title:   "huxio",
-				Version: version,
-				Description: "Self-hosted webhook delivery. The surface mirrors the incumbent's REST API, " +
-					"so its client SDKs work unmodified; additions live on their own paths.",
-			}, []openapi.Server{{URL: server, Description: "This deployment"}})
+			document := inboundhttp.Spec(router, inboundhttp.SpecInfo(version),
+				[]openapi.Server{{URL: server, Description: "This deployment"}})
 
 			encoded, err := document.JSON()
 			if err != nil {

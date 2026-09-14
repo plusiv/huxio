@@ -3,6 +3,7 @@ package main
 import (
 	"cmp"
 	"context"
+	"database/sql"
 	"errors"
 	"net/http"
 	"os/signal"
@@ -11,6 +12,8 @@ import (
 	"syscall"
 	"time"
 
+	// Registers the pgx stdlib driver, which goose needs for database/sql.
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/plusiv/huxio/configs"
 	inboundhttp "github.com/plusiv/huxio/internal/adapters/inbound/http"
 	"github.com/plusiv/huxio/internal/adapters/inbound/http/handlers"
@@ -30,6 +33,7 @@ import (
 	"github.com/plusiv/huxio/internal/infrastructure/payload"
 	"github.com/plusiv/huxio/internal/infrastructure/secrets"
 	"github.com/plusiv/huxio/internal/infrastructure/telemetry"
+	"github.com/plusiv/huxio/migrations"
 	"github.com/rotisserie/eris"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
@@ -44,6 +48,10 @@ func newServeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Run the API, the delivery workers, or both",
+		Long: "Applies any pending schema migrations, then runs the selected role until\n" +
+			"the process is signalled. Every node migrates on startup under an advisory\n" +
+			"lock, so a whole fleet can be started at once.\n\n" +
+			"The API role serves its OpenAPI document at /api/v1/openapi.json.",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg, err := configs.Load()
 			if err != nil {
@@ -103,6 +111,10 @@ func serve(ctx context.Context, cfg *configs.Config) error {
 		Issuer:        cfg.JWTIssuer,
 	})
 	if err != nil {
+		return err
+	}
+
+	if err := migrateSchema(ctx, cfg.DatabaseURL); err != nil {
 		return err
 	}
 
@@ -193,6 +205,7 @@ func serve(ctx context.Context, cfg *configs.Config) error {
 
 		router = inboundhttp.NewRouter(inboundhttp.RouterDeps{
 			Config: inboundhttp.RouterConfig{
+				Version:            version,
 				MaxPayloadBytes:    cfg.MaxPayloadBytes,
 				CORSAllowOrigins:   cfg.CORSAllowOrigins,
 				RateLimitOrgRPS:    cfg.RateLimitOrgRPS,
@@ -415,6 +428,32 @@ func serve(ctx context.Context, cfg *configs.Config) error {
 		return err
 	}
 	log.Info().Msg("shutdown complete")
+	return nil
+}
+
+// migrateSchema brings the schema up to date before anything serves against
+// it. Every role does this on its own rather than leaving it to an operator,
+// so there is no window in which a node runs against a schema that is behind
+// the binary. Concurrent starts are safe: the runner holds an advisory lock
+// for the run.
+func migrateSchema(ctx context.Context, dsn string) error {
+	log := logger.FromContext(ctx)
+
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		return eris.Wrap(err, "open database for migrations")
+	}
+	defer func() { _ = db.Close() }()
+
+	if err := migrations.Up(ctx, db); err != nil {
+		return err
+	}
+
+	schemaVersion, err := migrations.Version(ctx, db)
+	if err != nil {
+		return err
+	}
+	log.Info().Int64("schema_version", schemaVersion).Msg("schema up to date")
 	return nil
 }
 

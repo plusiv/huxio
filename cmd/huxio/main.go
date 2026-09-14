@@ -1,6 +1,6 @@
 // Command huxio is the single binary for every role of the webhook delivery
-// service: the HTTP API, the delivery workers, schema migrations, token
-// generation and the benchmark harness.
+// service: the HTTP API, the delivery workers, token generation and the
+// tenant bootstrap.
 package main
 
 // TZ in a deployment makes time.Local need the zone database, which the

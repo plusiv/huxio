@@ -59,7 +59,7 @@ HTTP and HTTPS:
 
 ```bash
 make bench-baseline   # record the current numbers
-go run ./cmd/huxio bench --scenario=throughput --baseline=bench/baselines/throughput.json
+go run ./cmd/huxio-dev bench --scenario=throughput --baseline=bench/baselines/throughput.json
 ```
 
 The gate fails when deliveries/sec drops, or ingest p99, delivery p99 or

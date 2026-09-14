@@ -67,12 +67,12 @@ jobs:
         run: |
           baseline=bench/baselines/throughput.json
           if [ -f "$baseline" ]; then
-            go run ./cmd/huxio bench --scenario=throughput --duration=30s --baseline="$baseline"
+            go run ./cmd/huxio-dev bench --scenario=throughput --duration=30s --baseline="$baseline"
           else
-            go run ./cmd/huxio bench --scenario=throughput --duration=30s
+            go run ./cmd/huxio-dev bench --scenario=throughput --duration=30s
           fi
       - name: Isolation scenario
-        run: go run ./cmd/huxio bench --scenario=isolation --duration=40s
+        run: go run ./cmd/huxio-dev bench --scenario=isolation --duration=40s
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@v4

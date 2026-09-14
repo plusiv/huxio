@@ -6,6 +6,7 @@ import (
 	"io/fs"
 
 	"github.com/pressly/goose/v3"
+	"github.com/pressly/goose/v3/lock"
 	"github.com/rotisserie/eris"
 )
 
@@ -83,12 +84,25 @@ func Version(ctx context.Context, db *sql.DB) (int64, error) {
 // The provider API is used rather than goose's package-level helpers because
 // those mutate process-global state, which races as soon as two databases are
 // migrated concurrently (as the integration suite does).
+//
+// The session locker takes a Postgres advisory lock for the run. Every node
+// migrates on startup, so a rolling deploy has several of them applying the
+// same pending migration at the same moment; without the lock the losers fail
+// on a relation that already exists. Advisory locks are scoped to one
+// database, so tests migrating separate databases never wait on each other.
 func newProvider(db *sql.DB) (*goose.Provider, error) {
 	sub, err := fs.Sub(Migrations, schemaDir)
 	if err != nil {
 		return nil, eris.Wrap(err, "open embedded migrations")
 	}
-	provider, err := goose.NewProvider(goose.DialectPostgres, db, sub, goose.WithTableName(schemaVersionTable))
+	locker, err := lock.NewPostgresSessionLocker()
+	if err != nil {
+		return nil, eris.Wrap(err, "build migration locker")
+	}
+	provider, err := goose.NewProvider(goose.DialectPostgres, db, sub,
+		goose.WithTableName(schemaVersionTable),
+		goose.WithSessionLocker(locker),
+	)
 	if err != nil {
 		return nil, eris.Wrap(err, "build migration provider")
 	}

@@ -46,17 +46,19 @@ cover: ## Coverage across every test, including the integration suite
 		-coverprofile=coverage.out ./...
 	go tool cover -func=coverage.out | tail -1
 
+# The schema commands are development tooling, not operations: serve applies
+# pending migrations on startup, so a deployment never runs them by hand.
 .PHONY: migrate-up
-migrate-up: ## Apply schema migrations
-	go run ./cmd/huxio migrate up
+migrate-up: ## Apply schema migrations (serve already does this on startup)
+	go run ./cmd/huxio-dev migrate up
 
 .PHONY: migrate-down
 migrate-down: ## Roll back the last migration
-	go run ./cmd/huxio migrate down
+	go run ./cmd/huxio-dev migrate down
 
 .PHONY: migrate-status
 migrate-status: ## Show migration status
-	go run ./cmd/huxio migrate status
+	go run ./cmd/huxio-dev migrate status
 
 .PHONY: migrate-create
 migrate-create: ## Create a migration: make migrate-create NAME=add_something
@@ -103,7 +105,7 @@ docker-build: ## Build the container image
 
 .PHONY: openapi
 openapi: ## Write the generated OpenAPI document to openapi.json
-	go run ./cmd/huxio openapi -o openapi.json
+	go run ./cmd/huxio-dev openapi -o openapi.json
 
 # The harness truncates every table it runs against, so the bench targets use
 # their own throwaway database on port 5433 rather than whatever the dev stack
@@ -111,7 +113,7 @@ openapi: ## Write the generated OpenAPI document to openapi.json
 BENCH_CONTAINER := huxio-bench-db
 BENCH_PORT      := 5433
 BENCH_DSN       ?= postgres://postgres:postgres@localhost:$(BENCH_PORT)/bench?sslmode=disable
-BENCH           := go run ./cmd/huxio bench --dsn='$(BENCH_DSN)'
+BENCH           := go run ./cmd/huxio-dev bench --dsn='$(BENCH_DSN)'
 
 .PHONY: bench-db
 bench-db: ## Start the throwaway Postgres the benchmarks run against

@@ -63,6 +63,10 @@ func RouteDocs() map[string]openapi.RouteDoc {
 			Description: "Fails while the database is unreachable, the config snapshot is stale, or the process is draining.",
 			Response:    reflect.TypeOf(readinessResponse{}),
 		},
+		"GET /api/v1/openapi.json": {
+			Summary: "OpenAPI document", Tags: []string{"admin"}, Public: true,
+			Description: "The spec for this deployment, generated from the routes it serves.",
+		},
 
 		"POST /api/v1/app": {
 			Summary: "Create an application", Tags: []string{"application"},
