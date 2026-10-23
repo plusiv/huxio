@@ -144,8 +144,7 @@ func buildEndpoint(ep *entities.Endpoint, sealer *secrets.Sealer, now time.Time)
 // BuiltAt reports when this snapshot was assembled.
 func (s *Snapshot) BuiltAt() time.Time { return s.builtAt }
 
-// Age reports how stale this snapshot is. Above five minutes means LISTEN died
-// and readiness must fail.
+// Age reports the time since this snapshot was built.
 func (s *Snapshot) Age() time.Duration { return time.Since(s.builtAt) }
 
 // Org returns a tenant, or nil.

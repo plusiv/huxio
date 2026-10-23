@@ -1,7 +1,5 @@
-// Package telemetry owns the Prometheus collectors for the whole binary. The
-// per-tenant histograms carry their weight: without a per-org breakdown,
-// "one noisy tenant does not slow the others down" is not something you can
-// show from the outside.
+// Package telemetry registers Prometheus collectors, including per-tenant
+// histograms for measuring delivery isolation.
 package telemetry
 
 import (

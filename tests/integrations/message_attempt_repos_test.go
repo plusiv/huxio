@@ -180,7 +180,7 @@ func TestAttemptRepoCopyAndFilters(t *testing.T) {
 		t.Errorf("CopyAttempts(nil) = %d, %v", n, err)
 	}
 
-	// "Everything that failed to this endpoint", the replay headline feature.
+	// Replay selects deliveries whose latest attempt failed for this endpoint.
 	failed, err := env.Attempts.GetAttempts(ctx, repositories.AttemptFilters{
 		EndpointID: repositories.Eq(ep.ID),
 		Status:     repositories.Eq(entities.AttemptFailed),

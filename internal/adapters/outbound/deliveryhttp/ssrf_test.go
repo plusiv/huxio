@@ -38,8 +38,7 @@ func TestGuardBlocksInternalRanges(t *testing.T) {
 		{"ipv6 unique local", "fc00::1"},
 		{"ipv6 link local", "fe80::1"},
 		{"ipv6 multicast", "ff02::1"},
-		// The mapped forms are the ones people forget, and they are exactly
-		// as dangerous as the plain ones.
+		// IPv4-mapped IPv6 addresses must follow the IPv4 restrictions.
 		{"ipv4-mapped loopback", "::ffff:127.0.0.1"},
 		{"ipv4-mapped metadata", "::ffff:169.254.169.254"},
 		{"ipv4-mapped private", "::ffff:10.0.0.1"},

@@ -1,7 +1,5 @@
-// Package postgres implements the repository ports on top of pgx/v5. pgx is
-// used directly, without database/sql and without an ORM, because CopyFrom and
-// SendBatch are the two APIs the delivery design depends on and neither
-// survives the database/sql abstraction.
+// Package postgres implements repository ports with pgx/v5, using CopyFrom
+// and SendBatch for batched writes.
 package postgres
 
 import (

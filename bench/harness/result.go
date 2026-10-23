@@ -1,6 +1,4 @@
-// Package harness runs the benchmark scenarios. The harness is the measuring
-// equipment: it exists so a performance claim can be reproduced by somebody
-// who does not believe it.
+// Package harness runs benchmark scenarios and records their results.
 package harness
 
 import (
@@ -196,9 +194,7 @@ func (r *Result) Write(dir string) (string, error) {
 	return path, nil
 }
 
-// RegressionBudget is how much a headline number may move before CI fails.
-// It exists to catch slow drift, which is the only kind of performance loss
-// nobody notices.
+// RegressionBudget is the allowed relative regression against a baseline.
 const RegressionBudget = 0.15
 
 // Load reads a previously written result, for comparing runs.
@@ -214,7 +210,7 @@ func Load(path string) (*Result, error) {
 	return &result, nil
 }
 
-// Regression is one headline number that moved the wrong way.
+// Regression identifies a metric that exceeded the regression budget.
 type Regression struct {
 	Metric   string
 	Baseline float64
@@ -223,7 +219,7 @@ type Regression struct {
 	Change float64
 }
 
-// CompareTo reports the headline numbers that moved beyond the budget against
+// CompareTo reports metrics that exceeded the regression budget against
 // a baseline run. Throughput dropping and latency rising are both failures.
 func (r *Result) CompareTo(baseline *Result) []Regression {
 	var regressions []Regression

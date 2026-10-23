@@ -50,7 +50,7 @@ var attemptFilterQuery = append([]openapi.Parameter{
 
 // RouteDocs describes every route, keyed by "METHOD /path". It lives in this
 // package because the payload types do: the spec is reflected off the same
-// structs the binder validates, so it cannot drift from what the API accepts.
+// structs used for request binding and validation.
 func RouteDocs() map[string]openapi.RouteDoc {
 	return map[string]openapi.RouteDoc{
 		"GET /api/v1/health": {

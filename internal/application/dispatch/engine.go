@@ -120,9 +120,8 @@ type EngineDeps struct {
 	// old to decide a task asks for a reload instead of waiting for the next
 	// scheduled refresh.
 	SnapshotInvalidator SnapshotInvalidator
-	// LaneManager is optional. Without it every delivery runs under the global
-	// in-flight bound alone, which is no per-endpoint bound at all; with it,
-	// isolation becomes structural.
+	// LaneManager is optional. When set, it enforces per-endpoint concurrency
+	// and waiter limits in addition to the global in-flight limit.
 	LaneManager *LaneManager
 	// EndpointState is optional: it records the health transitions that outlive a
 	// worker (failure-run start, auto-disable, quarantine).
@@ -278,8 +277,8 @@ func (e *Engine) claimAndDispatch(ctx context.Context) (int, error) {
 		return 0, nil
 	}
 
-	// Never claim more than there is capacity to run: a claimed task holds a
-	// lock, and a lock held by a task nobody is working on is pure lag.
+	// Claim only as many tasks as can run, so unused claims do not hold locks
+	// that other workers must wait to expire.
 	capacity := e.opts.MaxInflight - len(e.inflight)
 	if capacity <= 0 {
 		return 0, nil
@@ -341,9 +340,8 @@ func (e *Engine) claimAndDispatch(ctx context.Context) (int, error) {
 // inflightSlot is one delivery's hold on the engine's in-flight budget. It is
 // taken when the task is claimed and given back when the delivery is done,
 // except while the delivery waits for a lane slot: a waiter has no request on
-// the wire and holds no payload, so it should cost the worker nothing. Without
-// that release, one endpoint that stopped answering fills the whole budget
-// with waiters and the worker stops claiming everyone else's work.
+// the wire and holds no payload. Without that release, a failing endpoint
+// can fill the budget with waiters and stop claims for other endpoints.
 type inflightSlot struct {
 	engine *Engine
 	held   bool
@@ -537,9 +535,6 @@ func (e *Engine) handleDeliver(ctx context.Context, task entities.DeliveryTask, 
 		return
 	}
 
-	// The lane is this endpoint's dedicated slice of capacity: its AIMD
-	// concurrency, its rate limit and its circuit breaker, all in this worker's
-	// memory.
 	lane := e.laneFor(ep)
 	if lane != nil {
 		if !lane.Allow() {
@@ -559,8 +554,8 @@ func (e *Engine) handleDeliver(ctx context.Context, task entities.DeliveryTask, 
 			err := lane.Acquire(waitCtx)
 			cancel()
 			if err != nil {
-				// Saturated. The excess goes back to Postgres, where it is durable and
-				// costs this worker nothing until the lane has room again.
+				// Return excess work to the durable queue so it does not occupy a
+				// waiter or an in-flight slot.
 				e.deferForSaturation(ctx, task.ID)
 				return
 			}
@@ -705,9 +700,8 @@ func (e *Engine) applyHealthTransitions(ctx context.Context, ep *config.Endpoint
 		return
 	}
 
-	// Quarantine contains a retry storm from a customer who has been down for
-	// hours: subsequent tasks route to the quarantine pool and stop consuming
-	// healthy capacity entirely.
+	// Moving the endpoint to the quarantine pool routes subsequent tasks
+	// away from the healthy pool's delivery capacity.
 	if e.opts.QuarantineAfter > 0 && ep.Pool != e.opts.QuarantinePool &&
 		lane.Breaker().OpenFor() >= e.opts.QuarantineAfter {
 		if !lane.MarkQuarantined() {
@@ -754,7 +748,7 @@ func (e *Engine) emitAttemptEvents(
 
 	switch {
 	case attempt.Status == entities.AttemptSucceeded:
-		// Only worth saying when we said something was wrong earlier.
+		// Send recovery only if a failing notice was previously sent.
 		if lane == nil || !lane.ClearFailingNotice() {
 			return
 		}

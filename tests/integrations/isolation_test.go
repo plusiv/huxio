@@ -170,16 +170,22 @@ func TestBreakerOpensAndQuarantinesADeadEndpoint(t *testing.T) {
 	}
 
 	// The breaker is what stopped the dialling, so the lane must show it.
-	lane := worker.lanes.Get(endpointID)
+	var lane *dispatch.LaneStats
+	for _, stat := range worker.lanes.Stats() {
+		if stat.EndpointID == endpointID {
+			lane = &stat
+			break
+		}
+	}
 	if lane == nil {
 		t.Fatal("the endpoint has no lane")
 	}
-	if lane.Breaker().State() == dispatch.BreakerClosed {
+	if lane.BreakerState == dispatch.BreakerClosed {
 		t.Error("the breaker must be open or half-open for a dead endpoint")
 	}
 	// A dead endpoint's lane collapses to one in flight rather than hammering
 	// it with the configured concurrency.
-	if got := lane.Concurrency(); got != 1 {
+	if got := lane.Concurrency; got != 1 {
 		t.Errorf("lane concurrency = %d, want it collapsed to 1", got)
 	}
 

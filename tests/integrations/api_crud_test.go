@@ -268,8 +268,8 @@ func TestAPIPortalTokenIsConfinedToItsApplication(t *testing.T) {
 		t.Errorf("portal token creating an endpoint = %d %s", resp.Status, resp.Body)
 	}
 
-	// Another application in the same tenant: forbidden. This is the bug that
-	// would be worst to ship, so it is asserted on every shape of route.
+	// Portal tokens must be refused on every route for another application,
+	// including applications in the same tenant.
 	forbidden := []request{
 		{Method: http.MethodGet, Path: "/api/v1/app/" + appB + "/endpoint/" + endpointB, Token: portal},
 		{Method: http.MethodGet, Path: "/api/v1/app/" + appB + "/endpoint", Token: portal},

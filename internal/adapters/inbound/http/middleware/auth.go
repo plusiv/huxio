@@ -54,10 +54,7 @@ func RequireAuth(parser TokenParser) echo.MiddlewareFunc {
 // RequireAppScope asserts that a portal token may only act on its own
 // application. It reads the application from the path parameter, so it must be
 // registered on every route that carries one.
-//
-// This is the single most important authorization check in the system: a
-// portal token that reaches another tenant's delivery log is the worst bug this
-// project can ship.
+
 func RequireAppScope(param string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c *echo.Context) error {

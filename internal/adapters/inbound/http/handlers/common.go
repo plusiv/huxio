@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"strconv"
 	"strings"
 
@@ -54,10 +53,6 @@ func orgToken(c *echo.Context) (authctx.Principal, error) {
 	}
 	return p, nil
 }
-
-// jsonMarshal is the single place responses are encoded outside Echo, for the
-// server-sent event stream.
-func jsonMarshal(v any) ([]byte, error) { return json.Marshal(v) }
 
 // parseAttemptStatus accepts either the numeric status or its name, because
 // both appear in the wild: the compatible SDKs send numbers and humans send

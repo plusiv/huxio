@@ -291,20 +291,6 @@ func TestLaneManagerReusesLanesPerEndpoint(t *testing.T) {
 	if manager.For(other) == first {
 		t.Error("different endpoints must get different lanes")
 	}
-	if manager.Len() != 2 {
-		t.Errorf("Len = %d, want 2", manager.Len())
-	}
-	if manager.Get("ep_1") != first {
-		t.Error("Get must return the existing lane")
-	}
-	if manager.Get("ep_missing") != nil {
-		t.Error("Get must return nil for an unknown endpoint")
-	}
-
-	manager.Drop("ep_1")
-	if manager.Get("ep_1") != nil {
-		t.Error("Drop must remove the lane")
-	}
 }
 
 func TestLaneManagerAppliesEndpointRateLimit(t *testing.T) {
@@ -358,8 +344,8 @@ func TestLaneManagerCreatesLanesSafelyUnderConcurrency(t *testing.T) {
 			t.Fatal("concurrent creation produced more than one lane for one endpoint")
 		}
 	}
-	if manager.Len() != 1 {
-		t.Errorf("Len = %d, want 1", manager.Len())
+	if got := len(manager.Stats()); got != 1 {
+		t.Errorf("Stats returned %d lanes, want 1", got)
 	}
 }
 
@@ -395,19 +381,18 @@ func TestLaneManagerEvictsIdleLanesButKeepsTrippedOnes(t *testing.T) {
 	if evicted := manager.EvictIdle(); evicted != 1 {
 		t.Errorf("evicted %d lanes, want only the idle one", evicted)
 	}
-	if manager.Get("ep_idle") != nil {
+	if manager.For(&config.Endpoint{Endpoint: &entities.Endpoint{ID: "ep_idle"}}) == idle {
 		t.Error("the idle lane must be evicted")
 	}
-	if manager.Get("ep_busy") == nil {
+	if manager.For(&config.Endpoint{Endpoint: &entities.Endpoint{ID: "ep_busy"}}) != busy {
 		t.Error("a lane with a delivery in flight must not be evicted")
 	}
 	// Discarding an open breaker would make the worker re-learn that a dead
 	// endpoint is dead, which is the cost the breaker exists to avoid.
-	if manager.Get("ep_tripped") == nil {
+	if manager.For(&config.Endpoint{Endpoint: &entities.Endpoint{ID: "ep_tripped"}}) != tripped {
 		t.Error("a lane with a tripped breaker must not be evicted")
 	}
 
-	_ = idle
 	busy.Release()
 }
 
@@ -433,9 +418,6 @@ func TestLaneManagerStatsAndCounts(t *testing.T) {
 	counts := manager.BreakerCounts()
 	if counts[dispatch.BreakerClosed] != 1 || counts[dispatch.BreakerOpen] != 1 {
 		t.Errorf("breaker counts = %v", counts)
-	}
-	if got := manager.TotalInFlight(); got != 1 {
-		t.Errorf("TotalInFlight = %d, want 1", got)
 	}
 
 	stats := manager.Stats()

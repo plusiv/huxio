@@ -8,8 +8,6 @@ import (
 // SecretType names the signing algorithm an endpoint's secret is used with.
 type SecretType string
 
-// The supported signing algorithms. hmac256 is the default because ed25519 is
-// roughly 50x more expensive to sign.
 const (
 	SecretTypeHMAC256 SecretType = "hmac256"
 	SecretTypeEd25519 SecretType = "ed25519"

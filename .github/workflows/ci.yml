@@ -36,9 +36,7 @@ jobs:
           version: v2.13
 
   bench-gate:
-    # Throughput and isolation run on every merge to main and fail on a >15%
-    # regression. Isolation is the product claim, so a failure blocks the
-    # merge rather than just reporting.
+    # Throughput and isolation run after merges to main and fail on a >15% regression.
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     services:

@@ -25,11 +25,9 @@ type ListOrganizationsInput struct {
 	Limit  int
 }
 
-// OrganizationUseCase owns tenant lifecycle. There is no HTTP surface for it:
-// creating a tenant is an operator action and every API token is already
-// scoped to one, so `huxio org` is the only caller today. It exists as a use
-// case anyway so the rules live in the application layer rather than in a
-// cobra command, and so an admin route can be added without moving them.
+// OrganizationUseCase owns tenant lifecycle for the operator CLI. Tenant
+// creation is unavailable over HTTP because API tokens require an existing
+// organization.
 type OrganizationUseCase struct {
 	orgRepo     repositories.OrganizationRepository
 	invalidator ConfigInvalidator

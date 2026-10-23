@@ -25,7 +25,7 @@ type QueueRepo struct {
 func NewQueueRepo(store *Store) *QueueRepo { return &QueueRepo{store: store} }
 
 // ClaimQuery locks a batch of ready tasks for the owned partitions and hands
-// them back in the same round trip. The shape is worth reading closely:
+// returns them in one round trip:
 //
 //   - the inner SELECT ... FOR UPDATE SKIP LOCKED is what makes this a queue.
 //     Without SKIP LOCKED, two workers claiming at once would block on each
@@ -37,10 +37,10 @@ func NewQueueRepo(store *Store) *QueueRepo { return &QueueRepo{store: store} }
 //     leases. Two workers therefore never look at the same rows, and
 //     SKIP LOCKED almost never has to skip anything.
 //   - ORDER BY visible_at, id is the order task_claim_idx is already in,
-//     which is the whole reason that index leads with visible_at rather than
+//     so the index leads with visible_at rather than
 //     partition_key. Ordering the index the other way makes the planner read
 //     every ready row and sort it to find the batch, so the claim gets
-//     slower as the backlog grows, which is exactly backwards.
+//     slower as the backlog grows.
 //   - locked_until is a timestamp, not a boolean: a worker that dies holds
 //     nothing forever, and the maintenance loop returns the row once the
 //     lease has passed.
@@ -143,7 +143,7 @@ func (r *QueueRepo) Retry(ctx context.Context, id int64, delay time.Duration) er
 
 // Defer pushes a task into the future without counting an attempt. It is used
 // when a worker cannot decide the task yet, such as a fan-out whose config
-// snapshot predates the message it would expand.
+// snapshot predates the fan-out task.
 func (r *QueueRepo) Defer(ctx context.Context, id int64, delay time.Duration) error {
 	const query = `
 		UPDATE delivery_task

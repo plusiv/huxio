@@ -34,9 +34,7 @@ type AttemptRepo struct {
 // NewAttemptRepo builds the repository.
 func NewAttemptRepo(store *Store) *AttemptRepo { return &AttemptRepo{store: store} }
 
-// CopyAttempts bulk-inserts a batch with COPY, collapsing hundreds of round
-// trips into one. This is the largest single throughput win in the design,
-// which is why there is deliberately no single-row insert here.
+// CopyAttempts writes a batch with COPY in one database round trip.
 func (r *AttemptRepo) CopyAttempts(ctx context.Context, attempts []entities.DeliveryAttempt) (int64, error) {
 	if len(attempts) == 0 {
 		return 0, nil

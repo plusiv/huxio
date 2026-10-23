@@ -175,11 +175,8 @@ func runThroughput(ctx context.Context, cfg Config) (*Result, error) {
 	return result, nil
 }
 
-// runIsolation is the scenario the product claim rests on. It measures the
-// healthy tenants twice in one run: once with every endpoint healthy, and
-// again with a share of tenants pointed at a tarpit. The pass condition is a
-// comparison within the same run, so nobody has to trust a number from
-// another machine.
+// runIsolation compares healthy-tenant latency before and during a tarpit
+// workload, using a baseline measured in the same run.
 func runIsolation(ctx context.Context, cfg Config) (*Result, error) {
 	tarpits := max(1, int(float64(cfg.Tenants)*cfg.TarpitFraction))
 	healthy := max(1, cfg.Tenants-tarpits)

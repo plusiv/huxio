@@ -11,9 +11,7 @@ import (
 	"github.com/rotisserie/eris"
 )
 
-// Gauge is the metric port the manager reports snapshot age through. It is
-// satisfied by a Prometheus gauge, and by nothing else the application layer
-// needs to know about.
+// Gauge reports snapshot age without coupling the manager to a metrics library.
 type Gauge interface {
 	Set(float64)
 }
@@ -30,10 +28,9 @@ type ManagerOptions struct {
 }
 
 // Manager keeps a Snapshot current behind an atomic pointer. Reads are
-// lock-free pointer loads; there is no per-delivery cache lookup and no Redis.
+// lock-free pointer loads without per-delivery database queries.
 type Manager struct {
-	snapshotRepo repositories.SnapshotRepository
-	// notifications delivers the invalidations that trigger a reload.
+	snapshotRepo  repositories.SnapshotRepository
 	notifications repositories.NotificationListener
 	sealer        *secrets.Sealer
 	age           Gauge
@@ -164,8 +161,8 @@ func (m *Manager) Run(ctx context.Context) error {
 
 func (m *Manager) reloadNow(ctx context.Context) {
 	if err := m.Load(ctx); err != nil {
-		// The previous snapshot stays in place: stale config is far better than no
-		// config, and the age metric will expose the staleness.
+		// Keep serving the previous snapshot if a reload fails. The age metric
+		// exposes how long it has been stale.
 		logger.FromContext(ctx).Error().Err(err).Msg("config snapshot refresh failed")
 	}
 }

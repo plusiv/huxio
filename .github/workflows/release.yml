@@ -8,9 +8,7 @@ permissions:
   contents: read
 
 jobs:
-  # The same checks ci.yml runs, repeated here because a tag can be pushed to a
-  # commit CI never saw, and a broken tag cannot be taken back once people have
-  # pulled it.
+  # Validate tags independently: a tag may reference a commit CI has not checked.
   verify:
     runs-on: ubuntu-latest
     steps:

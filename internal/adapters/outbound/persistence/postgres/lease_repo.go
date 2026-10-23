@@ -8,9 +8,7 @@ import (
 	"github.com/rotisserie/eris"
 )
 
-// LeaseRepo is the pgx implementation of repositories.LeaseRepository. The
-// lease table is deliberately debuggable with a plain SELECT, which is a large
-// part of why fixed partitions beat a consistent-hashing ring.
+// LeaseRepo stores worker registrations and partition leases in Postgres.
 type LeaseRepo struct {
 	store      *Store
 	partitions int

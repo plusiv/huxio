@@ -1,7 +1,5 @@
-// Package sinks holds the receiving ends of the benchmark harness: four tiny
-// servers that behave like the four endpoint failure modes that matter. A
-// benchmark a skeptic can reproduce is worth more than any number in a README,
-// so these are deliberately trivial.
+// Package sinks provides benchmark receivers that respond immediately, delay,
+// fail intermittently, or trickle response bodies.
 package sinks
 
 import (

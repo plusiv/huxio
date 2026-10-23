@@ -9,9 +9,7 @@ import (
 	"github.com/plusiv/huxio/internal/application/config"
 )
 
-// SnapshotProvider hands out the current configuration snapshot. Every read is
-// a pointer load, so use cases and the delivery engine never query the
-// configuration tables.
+// SnapshotProvider hands out the current in-memory configuration snapshot.
 type SnapshotProvider interface {
 	Current() *config.Snapshot
 }

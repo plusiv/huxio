@@ -33,10 +33,9 @@ type Gauge interface {
 	Set(float64)
 }
 
-// AttemptWriter batches attempt records into one COPY per hundreds of
-// deliveries, which is the largest single throughput win in the design. A
-// single goroutine owns the flush, so ordering between an attempt and the
-// removal of its queue row is guaranteed.
+// AttemptWriter batches attempt records into COPY writes. A single goroutine
+// flushes attempts before finalizing their queue rows, so a failed write leaves
+// the tasks available for retry.
 type AttemptWriter struct {
 	attemptRepo repositories.AttemptRepository
 	taskQueue   Queue
@@ -79,10 +78,8 @@ func NewAttemptWriter(
 	}
 }
 
-// Enqueue buffers a record. It blocks while the buffer is full rather than
-// dropping the record or growing the buffer: a full buffer means Postgres is
-// the bottleneck, and blocking is what propagates that backpressure up into
-// task claiming.
+// Enqueue buffers a record. When the buffer is full, it blocks until space
+// is available or ctx is cancelled, propagating backpressure to task claiming.
 func (w *AttemptWriter) Enqueue(ctx context.Context, record AttemptRecord) error {
 	select {
 	case w.records <- record:
@@ -180,9 +177,8 @@ func (w *AttemptWriter) flush(ctx context.Context, batch []AttemptRecord) []Atte
 	}
 
 	if _, err := w.attemptRepo.CopyAttempts(ctx, attempts); err != nil {
-		// The attempt log is a log, not a lock. The queue rows are left untouched,
-		// so their locks expire and the deliveries are retried: at-least-once holds,
-		// and receivers dedupe on message id.
+		// Leave queue rows untouched after a failed attempt write. Their locks
+		// expire and deliveries are retried; receivers deduplicate by message id.
 		log.Error().Err(err).Int("records", len(attempts)).Msg("attempt batch flush failed")
 		return batch[:0]
 	}

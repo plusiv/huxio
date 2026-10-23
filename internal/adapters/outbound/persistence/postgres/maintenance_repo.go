@@ -22,9 +22,7 @@ var partitionedTables = map[string]struct{}{
 	TableDeliveryAttempt: {},
 }
 
-// MaintenanceRepo implements repositories.MaintenanceRepository. Partition
-// lifecycle lives here rather than in pg_partman: roughly eighty lines of SQL
-// is worth less than the one-binary install story.
+// MaintenanceRepo manages partitions and queue cleanup without database extensions.
 type MaintenanceRepo struct {
 	store *Store
 }
@@ -72,9 +70,8 @@ func (r *MaintenanceRepo) EnsureDailyPartitions(
 	return created, nil
 }
 
-// DropPartitionsBefore drops whole partitions older than the cutoff. Dropping
-// a partition is instant and produces no dead tuples, which is the entire
-// reason for partitioning.
+// DropPartitionsBefore drops partitions older than the cutoff without
+// producing the dead tuples of a row-by-row delete.
 func (r *MaintenanceRepo) DropPartitionsBefore(
 	ctx context.Context,
 	table string,

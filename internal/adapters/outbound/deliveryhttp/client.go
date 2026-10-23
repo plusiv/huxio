@@ -43,10 +43,8 @@ type Options struct {
 	TLSClientConfig *tls.Config
 }
 
-// Client performs signed webhook deliveries over one shared transport. The
-// defaults of net/http are wrong for this workload, most of all
-// MaxIdleConnsPerHost, whose default of 2 is the classic Go webhook-sender
-// footgun.
+// Client delivers signed webhooks over a shared transport. It raises idle
+// connection limits to support concurrent deliveries to the same host.
 type Client struct {
 	httpClient *http.Client
 	timeout    time.Duration

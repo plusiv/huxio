@@ -64,8 +64,7 @@ func (uc *PortalUseCase) Grant(ctx context.Context, orgID, appIDOrUID string, tt
 
 	lifetime := utils.Deref(ttl, uc.ttl)
 	if lifetime <= 0 || lifetime > 24*time.Hour {
-		// Portal tokens are short-lived by design: one leaking is the worst
-		// bug this project can ship, so the blast radius is capped.
+		// Limit token lifetime to bound access if a portal token leaks.
 		return PortalAccess{}, apperrors.NewValidationError("token lifetime must be between 1 second and 24 hours")
 	}
 
@@ -74,8 +73,7 @@ func (uc *PortalUseCase) Grant(ctx context.Context, orgID, appIDOrUID string, tt
 		return PortalAccess{}, err
 	}
 
-	// The URL points at our own embedded portal, not a hosted service. The
-	// token travels in the query once; the portal moves it into an HttpOnly
+	// The token travels in the query once; the portal moves it into an HttpOnly
 	// cookie and redirects, so it stops appearing in history or referrers.
 	return PortalAccess{
 		URL:    uc.baseURL + "/portal?token=" + url.QueryEscape(token),

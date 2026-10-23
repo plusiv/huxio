@@ -14,9 +14,8 @@ import (
 // disallowed.
 var ErrBlockedDestination = eris.New("destination address is not allowed")
 
-// blockedPrefixes are refused by default. The cloud metadata endpoint
-// (169.254.169.254) falls inside the link-local range and is the single most
-// commonly exploited SSRF target.
+// blockedPrefixes are refused by default. The link-local range includes the
+// cloud metadata address 169.254.169.254.
 var blockedPrefixes = []netip.Prefix{
 	netip.MustParsePrefix("0.0.0.0/8"),          // this host on this network
 	netip.MustParsePrefix("10.0.0.0/8"),         // private

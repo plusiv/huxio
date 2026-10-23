@@ -1,6 +1,5 @@
-// Package ids generates and parses the prefixed KSUID identifiers used
-// throughout huxio. A KSUID sorts by creation time, so ORDER BY id equals
-// ORDER BY created_at and cursor pagination is free.
+// Package ids generates and parses prefixed KSUID identifiers. Their embedded
+// timestamps have one-second resolution; ids within a second are randomly ordered.
 package ids
 
 import (
@@ -69,9 +68,9 @@ func HasPrefix(id string, p Prefix) bool {
 	return err == nil && prefix == p
 }
 
-// TimeOf returns the creation timestamp embedded in a prefixed KSUID. Message
-// and attempt rows are stored with exactly this value as created_at, so the
-// time partition holding a row is always derivable from its id alone.
+// TimeOf returns the second-resolution timestamp embedded in a prefixed KSUID.
+// Messages use it as created_at, allowing their partition to be derived from
+// the id. Attempts store a separate, higher-resolution timestamp.
 func TimeOf(id string) (time.Time, error) {
 	_, parsed, err := Split(id)
 	if err != nil {

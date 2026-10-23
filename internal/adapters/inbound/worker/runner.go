@@ -142,9 +142,8 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	runErr := group.Wait()
 
-	// Every delivery has finished, so what is still buffered describes real
-	// HTTP requests. Stopping the writer without this flush would lose that
-	// record on every single deploy.
+	// Flush buffered attempts after deliveries finish so their records survive
+	// shutdown.
 	log.Info().Msg("flushing attempt writer")
 	stopWriter()
 	if err := <-writerDone; err != nil {

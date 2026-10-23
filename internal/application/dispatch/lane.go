@@ -38,9 +38,8 @@ type LaneOptions struct {
 	Now func() time.Time
 }
 
-// Lane is the per-endpoint state that makes isolation structural rather than
-// best-effort: a failing endpoint consumes a bounded, dedicated slice of
-// capacity and physically cannot consume more.
+// Lane bounds concurrency and waiters for one endpoint and tracks its rate
+// limiter, circuit breaker and health transitions.
 //
 // A lane is owned by exactly one worker at a time, so its state lives only
 // in that worker's local memory.
@@ -120,8 +119,7 @@ func (l *Lane) Breaker() *Breaker { return l.breaker }
 // Acquire takes a concurrency slot, waiting while the lane is at capacity.
 // The wait is bounded two ways: by the caller's context, and by MaxWaiters,
 // past which it returns ErrLaneSaturated at once. A caller that is refused
-// should defer the task to the queue, where it is durable and costs nothing,
-// rather than hold anything in this worker's memory.
+// should defer the task to the durable queue instead of waiting in memory.
 func (l *Lane) Acquire(ctx context.Context) error {
 	l.touch()
 
@@ -139,8 +137,6 @@ func (l *Lane) Acquire(ctx context.Context) error {
 	}()
 
 	if l.limiter != nil {
-		// The rate limiter is per endpoint and lives in this worker's memory,
-		// so consulting it costs no network round trip.
 		if err := l.limiter.Wait(ctx); err != nil {
 			return err
 		}
@@ -160,7 +156,6 @@ func (l *Lane) Acquire(ctx context.Context) error {
 
 		select {
 		case <-waiter:
-			// Woken by a release; loop round and try to take the slot.
 		case <-ctx.Done():
 			l.cancelWaiter(waiter)
 			return ctx.Err()
@@ -252,8 +247,6 @@ func (l *Lane) OnSuccess() {
 
 // OnFailure applies the multiplicative decrease: halve on a timeout, a 429 or
 // a 5xx, and drop straight to one when the endpoint is not there at all.
-// Nobody configures this, which is the point: it converges on whatever the
-// endpoint can actually absorb.
 func (l *Lane) OnFailure(result DeliveryResult) {
 	l.breaker.OnFailure()
 

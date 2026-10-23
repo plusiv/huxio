@@ -3,8 +3,7 @@
 // purging expired idempotency keys.
 //
 // It runs inside worker processes and is guarded by a named lease so exactly
-// one instance is active cluster-wide. It is deliberately not a separate
-// deployment: that would make the install story worse for no benefit.
+// one instance is active cluster-wide.
 package maintenance
 
 import (
@@ -244,8 +243,8 @@ func (l *Loop) purgeIdempotencyKeys(ctx context.Context) {
 }
 
 // managePartitions keeps the daily partitions ahead of writes and drops the
-// ones past retention. Dropping a partition is instant and produces no dead
-// tuples, which is the entire reason for partitioning.
+// ones past retention. Dropping whole partitions avoids the dead tuples
+// produced by deleting individual rows.
 func (l *Loop) managePartitions(ctx context.Context) {
 	log := logger.FromContext(ctx)
 
@@ -257,8 +256,8 @@ func (l *Loop) managePartitions(ctx context.Context) {
 		{repositories.TableDeliveryAttempt, l.opts.AttemptRetentionDays},
 	} {
 		if _, err := l.partitionRepo.EnsureDailyPartitions(ctx, table.name, l.opts.PartitionsAhead); err != nil {
-			// An insert into a missing partition fails outright, so this is the one
-			// maintenance failure worth shouting about.
+			// A missing partition rejects inserts, so partition creation failures
+			// are logged at error level.
 			log.Error().Err(err).Str("table", table.name).Msg("failed to create time partitions")
 			continue
 		}
@@ -279,8 +278,7 @@ func (l *Loop) managePartitions(ctx context.Context) {
 	}
 }
 
-// reportQueueStats samples depth and lag per pool. Queue lag is the worker
-// autoscaling signal and the first SLO to break.
+// reportQueueStats samples depth and lag per pool for alerts and autoscaling.
 func (l *Loop) reportQueueStats(ctx context.Context) {
 	stats, err := l.queueRepo.Stats(ctx, l.opts.Pools)
 	if err != nil {

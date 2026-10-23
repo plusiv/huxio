@@ -14,8 +14,7 @@ import (
 )
 
 // ErrorResponse is the envelope every failed request returns. It never
-// carries internal detail: error strings leak table names, hostnames and
-// query fragments to whoever is probing.
+// exposes internal errors, which may contain table names, hosts, or SQL.
 type ErrorResponse struct {
 	Code             string            `json:"code"`
 	Detail           string            `json:"detail"`

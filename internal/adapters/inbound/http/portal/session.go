@@ -2,10 +2,8 @@
 // of their own deliveries. It ships in the binary, server-rendered, with no
 // build step and no third-party frontend assets.
 //
-// The portal derives the application it is showing from the token, never from
-// the URL. There is therefore no request a portal session can make that names
-// another application, which is a stronger guarantee than checking that a
-// path segment matches: a leaked token cannot be pointed at anything.
+// Application scope comes from the session token, never a URL parameter.
+// Endpoint and message lookups must remain scoped to that application.
 package portal
 
 import (

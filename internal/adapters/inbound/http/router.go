@@ -41,9 +41,7 @@ type RouterConfig struct {
 	PortalSecureCookie bool
 }
 
-// RouterDeps is everything the router needs. It is a struct rather than a long
-// parameter list because the route table keeps growing and a positional call
-// with twenty handlers is a bug waiting to happen.
+// RouterDeps supplies handlers, authentication, and telemetry to the router.
 type RouterDeps struct {
 	Config RouterConfig
 
@@ -69,10 +67,8 @@ type RouterDeps struct {
 	StreamHandler      *handlers.StreamHandler
 }
 
-// NewTelemetryRouter composes the minimal surface a worker-only process
-// serves: metrics and health. Without it a worker exposes no HTTP at all, so
-// the delivery metrics it alone produces cannot be scraped and nothing about
-// a split-role deployment is measurable.
+// NewTelemetryRouter exposes health and metrics for worker-only processes,
+// including the delivery metrics produced by those workers.
 func NewTelemetryRouter(metrics *telemetry.Metrics, health *handlers.HealthHandler) *echo.Echo {
 	e := echo.New()
 	e.HTTPErrorHandler = handlers.CustomHTTPErrorHandler
@@ -215,9 +211,7 @@ func NewRouter(deps RouterDeps) *echo.Echo {
 	app.GET("/msg/:msg_id/endpoint/:endpoint_id/attempt", deps.AttemptHandler.ListByMessageAndEndpoint)
 	app.POST("/msg/:msg_id/endpoint/:endpoint_id/resend", deps.AttemptHandler.Resend)
 
-	// Features the incumbent's SDKs know nothing about get their own paths
-	// rather than extra fields on an existing response. A client parsing a
-	// shape it already knows never has to cope with it changing.
+	// Additional routes leave existing SDK response shapes unchanged.
 	app.POST("/replay", deps.AttemptHandler.Replay)
 	app.GET("/attempt/stream", deps.StreamHandler.StreamAttempts)
 
@@ -247,11 +241,8 @@ func NewRouter(deps RouterDeps) *echo.Echo {
 	return e
 }
 
-// registerPortal mounts the embedded portal behind the session middleware.
-// No portal URL contains an application id: the session decides which
-// application you are looking at. That is stronger than checking a path
-// against the token, because there is no new route on which someone could
-// forget the check.
+// registerPortal mounts the portal behind session middleware. Application
+// scope always comes from the session; routes accept no application id.
 func registerPortal(e *echo.Echo, deps RouterDeps) {
 	group := e.Group("/portal", portal.RequireSession(deps.TokenParser, deps.Config.PortalSecureCookie))
 

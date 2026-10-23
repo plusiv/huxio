@@ -1,6 +1,5 @@
-// Package signing implements the Standard Webhooks signature format. It is
-// pure: no I/O, no framework, no clock of its own. Match this byte for byte or
-// every receiver verification library breaks.
+// Package signing implements the Standard Webhooks signature format using
+// caller-supplied timestamps and keys.
 package signing
 
 import (
@@ -20,9 +19,7 @@ type HeaderScheme string
 const (
 	// SchemeStandard emits webhook-id / webhook-timestamp / webhook-signature.
 	SchemeStandard HeaderScheme = "standard"
-	// SchemeHuxio emits huxio-prefixed names instead. A receiver already
-	// written against that naming needs no changes; a migrating tenant just
-	// changes one config value rather than redeploying every receiver.
+	// SchemeHuxio emits huxio-prefixed names for receivers that expect them.
 	SchemeHuxio HeaderScheme = "huxio"
 )
 
@@ -103,8 +100,7 @@ func (s *Signer) Sign(msgID string, timestamp time.Time, payload []byte, keys []
 }
 
 // Headers returns every header a signed request carries, keyed by the name to
-// send. Custom endpoint headers are applied by the caller afterwards and may
-// never override these.
+// send. Callers must preserve these values when merging custom endpoint headers.
 func (s *Signer) Headers(msgID string, timestamp time.Time, payload []byte, keys []Key) (map[string]string, error) {
 	signature, err := s.Sign(msgID, timestamp, payload, keys)
 	if err != nil {

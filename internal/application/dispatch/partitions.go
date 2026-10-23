@@ -6,9 +6,8 @@ import (
 	"github.com/plusiv/huxio/internal/domain/entities"
 )
 
-// StaticPartitions owns every partition. It is the v1 single-worker
-// configuration: correct for one worker per pool, and replaced by the lease
-// manager when several workers share a pool.
+// StaticPartitions owns every partition. Use it only when one worker serves
+// the pool; shared pools require lease-managed ownership.
 type StaticPartitions struct {
 	partitions []int16
 }

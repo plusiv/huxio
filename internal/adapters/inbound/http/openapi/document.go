@@ -141,9 +141,8 @@ func Documentable(route Route) bool {
 	}
 }
 
-// Build assembles the document from the registered routes and their docs.
-// A route with no entry in docs still appears: an undocumented endpoint is
-// better than a missing one, and the gap is obvious.
+// Build assembles the document from registered routes and their docs.
+// Routes without documentation entries are still included.
 func Build(info Info, servers []Server, routes []Route, docs map[string]RouteDoc) *Document {
 	document := &Document{
 		OpenAPI: "3.0.3",

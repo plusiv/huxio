@@ -1,5 +1,4 @@
-# Alert on the worst tenant, not the global
-# aggregate: a global p99 hides exactly the failure this system exists to avoid.
+# Alert per tenant so global aggregates cannot hide an isolated latency increase.
 groups:
   - name: huxio
     rules:

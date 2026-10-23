@@ -46,9 +46,7 @@ type QueueStats struct {
 	OldestAge time.Duration
 }
 
-// QueueRepository is the port for the work queue. The Postgres implementation
-// is the only one in v1; the interface exists so a Redis or NATS backend is a
-// config flag rather than a rewrite.
+// QueueRepository is the port for the work queue.
 type QueueRepository interface {
 	// Claim locks and returns a batch of ready tasks for the owned partitions.
 	Claim(ctx context.Context, req ClaimRequest) ([]entities.DeliveryTask, error)

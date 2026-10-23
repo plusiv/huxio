@@ -1,7 +1,4 @@
-// Package logger provides the application-wide zerolog-based structured logging
-// infrastructure. It is the single place that owns the zerolog implementation;
-// every other layer (inbound adapters, application services, outbound adapters)
-// only consumes a logger extracted from context, never constructs one directly.
+// Package logger configures zerolog and carries request-scoped loggers in context.
 package logger
 
 import (
@@ -16,13 +13,11 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// ctxKey is the unexported key type used to store the logger in a context.
 type ctxKey struct{}
 
-// base is the package-level fallback logger, initialised by Init and returned
-// by FromContext when no logger has been stored in a context. It is held in an
-// atomic pointer so a late Init (a test harness, a config reload) can never
-// race a concurrent read on the delivery path.
+// base is the fallback used when context has no logger. Atomic storage protects
+// reads during replacement; Init still must run before starting goroutines
+// because it also changes zerolog globals.
 var base atomic.Pointer[zerolog.Logger]
 
 func init() {

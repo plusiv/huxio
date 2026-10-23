@@ -209,9 +209,7 @@ func (uc *AttemptUseCase) Resend(ctx context.Context, in ResendInput) error {
 	}, createdAt, entities.TriggerManual)
 }
 
-// Recover replays everything that failed to one endpoint since a point in
-// time. This is the headline feature the partial failed-attempt index exists
-// to serve.
+// Recover replays failed deliveries to one endpoint within a time window.
 func (uc *AttemptUseCase) Recover(ctx context.Context, in RecoverInput) (ReplayResult, error) {
 	app, err := uc.resolver.resolve(ctx, in.OrgID, in.AppIDOrUID)
 	if err != nil {

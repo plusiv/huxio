@@ -8,9 +8,7 @@ import (
 	"time"
 )
 
-// DNSCache caches resolver results in process. Go's resolver hits the system
-// resolver on every dial, so caching removes a round trip from every cold
-// delivery; it is a performance feature as much as an SSRF one.
+// DNSCache caches resolver results to reduce lookups across connections.
 type DNSCache struct {
 	resolver Resolver
 	ttl      time.Duration
@@ -50,7 +48,7 @@ type DNSCacheOptions struct {
 	OnMiss func()
 }
 
-// NewDNSCache builds a cache with sane defaults.
+// NewDNSCache applies default TTLs when options are non-positive.
 func NewDNSCache(opts DNSCacheOptions) *DNSCache {
 	cache := &DNSCache{
 		resolver: opts.Resolver,

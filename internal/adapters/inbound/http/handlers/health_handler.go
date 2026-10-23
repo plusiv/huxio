@@ -10,9 +10,8 @@ import (
 	"github.com/plusiv/huxio/internal/application/config"
 )
 
-// MaxSnapshotAge is how stale the config snapshot may be before readiness
-// fails. Beyond it, LISTEN has died and this process is delivering with config
-// nobody can see.
+// MaxSnapshotAge bounds snapshot staleness before readiness fails. An old
+// snapshot indicates that configuration reloads are not succeeding.
 const MaxSnapshotAge = 5 * time.Minute
 
 // HealthChecker reports whether the database can serve queries.
@@ -20,8 +19,7 @@ type HealthChecker interface {
 	Healthy(ctx context.Context) error
 }
 
-// HealthHandler serves liveness and readiness. Getting this split wrong makes
-// rolling deploys drop traffic.
+// HealthHandler serves liveness and readiness.
 type HealthHandler struct {
 	database        HealthChecker
 	snapshotManager *config.Manager

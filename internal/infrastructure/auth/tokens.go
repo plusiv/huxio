@@ -168,7 +168,7 @@ func (m *Manager) issue(subject, scope, orgID string, ttl time.Duration) (string
 }
 
 // Parse validates a token and returns its claims. Every failure maps to a
-// single opaque 401: which check failed is not the caller's business.
+// single opaque 401 to avoid exposing which validation check failed.
 func (m *Manager) Parse(token string) (*Claims, error) {
 	claims := &Claims{}
 	parsed, err := m.parser.ParseWithClaims(token, claims, func(*jwt.Token) (any, error) {

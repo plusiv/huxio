@@ -21,7 +21,7 @@ type PartitionSpec struct {
 
 // MaintenanceRepository is the port for the maintenance loop: partition
 // lifecycle and queue hygiene. Retention detaches and drops whole partitions
-// rather than deleting rows, which is the entire reason for partitioning.
+// rather than deleting individual rows, avoiding dead tuples.
 type MaintenanceRepository interface {
 	// EnsureDailyPartitions creates the partitions for [today, today+ahead].
 	EnsureDailyPartitions(ctx context.Context, table string, ahead int) ([]PartitionSpec, error)

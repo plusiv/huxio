@@ -10,8 +10,7 @@ import (
 	"time"
 )
 
-// TestAPIAttemptStreamTailsNewAttempts exercises the portal's headline
-// feature: a live tail of deliveries as they happen.
+// TestAPIAttemptStreamTailsNewAttempts verifies delivery over a real HTTP stream.
 func TestAPIAttemptStreamTailsNewAttempts(t *testing.T) {
 	t.Parallel()
 
@@ -113,9 +112,7 @@ func TestAPIAttemptStreamRequiresScopedToken(t *testing.T) {
 	appID := api.createApp(t, "Stream auth", nil)
 	otherApp := api.createApp(t, "Other", nil)
 
-	// A portal token for another application must not open the tail: a leaked
-	// portal token reaching another tenant's delivery log is the worst bug
-	// this project can ship.
+	// A portal token must not open another application's stream.
 	resp := api.do(t, request{
 		Method: http.MethodGet,
 		Path:   "/api/v1/app/" + otherApp + "/attempt/stream",

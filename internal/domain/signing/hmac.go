@@ -9,10 +9,8 @@ import (
 // sha256BlockSize is the block size HMAC pads keys to.
 const sha256BlockSize = 64
 
-// hasherPool keeps SHA-256 hashers alive across deliveries. crypto/hmac
-// cannot be re-keyed, so a pool of hmac.Hash values is useless; pooling the
-// underlying hashers and doing the two-pass padding here is what actually
-// removes the per-signature allocations.
+// hasherPool reuses SHA-256 hashers across deliveries. crypto/hmac does not
+// support changing keys, so the HMAC padding is applied here with pooled hashers.
 var hasherPool = sync.Pool{
 	New: func() any { return sha256.New() },
 }

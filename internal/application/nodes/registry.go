@@ -1,7 +1,7 @@
 // Package nodes keeps a process registered among its peers and reports how
 // many are live. API nodes are stateless and load-balanced, so a per-tenant
 // rate limit has to be enforced as limit/node_count on each of them.
-// Approximate is fine: this is abuse protection, not billing.
+// The count is eventually consistent and suitable for approximate abuse limits.
 package nodes
 
 import (
@@ -61,8 +61,8 @@ func New(leaseRepo repositories.LeaseRepository, opts Options) (*Registry, error
 	return registry, nil
 }
 
-// Nodes reports the live peer count. It never returns less than one, because
-// dividing a limit by zero is worse than assuming we are alone.
+// Nodes reports the live peer count, with a minimum of one to keep rate-limit
+// division valid before peers have been counted.
 func (r *Registry) Nodes() int {
 	if count := r.count.Load(); count > 0 {
 		return int(count)
@@ -71,7 +71,7 @@ func (r *Registry) Nodes() int {
 }
 
 // Run registers this process and refreshes both the row and the count until
-// ctx is cancelled, then deregisters so peers stop dividing by a ghost.
+// ctx is cancelled, then deregisters so peers update their rate-limit shares.
 func (r *Registry) Run(ctx context.Context) error {
 	r.refresh(ctx)
 

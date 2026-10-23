@@ -1,7 +1,4 @@
-// Package configs loads the runtime configuration from the environment. The
-// knob count stays deliberately small, every knob has an obvious unit, and
-// the defaults are the ones we run in production: a setting nobody ever
-// changes is a setting nobody has tested.
+// Package configs loads runtime configuration from the environment.
 package configs
 
 import (
@@ -186,9 +183,7 @@ type envVars struct {
 	CORSAllowOrigins []string `default:"*" split_words:"true"`
 }
 
-// Load parses the environment into a Config, applying defaults and derived
-// values. It returns an error rather than panicking so callers (including
-// tests) decide how to fail.
+// Load parses the environment, applies defaults, and validates configuration.
 func Load() (*Config, error) {
 	// Local .env for developer workflows; process env always wins.
 	_ = godotenv.Load(".env", "../.env")
@@ -224,9 +219,7 @@ func Load() (*Config, error) {
 
 	maxConns := env.DBMaxConns
 	if maxConns <= 0 {
-		// Workers spend their time blocked on customer HTTP, not on Postgres, so a
-		// handful of connections saturates them. Sizing worker pools like API pools
-		// just burns Postgres backends.
+		// Workers wait on outbound HTTP, so they need fewer database connections.
 		if role == RoleWorker {
 			maxConns = 6
 		} else {

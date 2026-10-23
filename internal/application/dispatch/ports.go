@@ -68,8 +68,6 @@ type MessageStore interface {
 }
 
 // PartitionSource reports which queue partitions this worker currently owns.
-// In v1 a worker owns every partition; the lease manager replaces this with a
-// fair share once partition ownership lands.
 type PartitionSource interface {
 	Partitions() []int16
 }
@@ -109,8 +107,8 @@ type AttemptRecord struct {
 // AttemptSink accepts attempt records. It buffers and flushes in batches; the
 // engine never writes one row per delivery.
 type AttemptSink interface {
-	// Enqueue blocks when the buffer is full, which is the correct backpressure:
-	// a full buffer means Postgres is the bottleneck.
+	// Enqueue blocks when the buffer is full, propagating backpressure to
+	// task claiming.
 	Enqueue(ctx context.Context, record AttemptRecord) error
 }
 
@@ -153,7 +151,7 @@ type OperationalEvent struct {
 
 // OperationalEmitter publishes operational events. They go through the normal
 // ingest path, so they retry, sign and appear in the delivery log like any
-// other message; there is deliberately no second delivery mechanism.
+// other message.
 type OperationalEmitter interface {
 	Emit(ctx context.Context, event OperationalEvent) error
 }

@@ -8,14 +8,11 @@ import (
 // BreakerState is a circuit breaker's state.
 type BreakerState int
 
-// The three breaker states.
 const (
 	// BreakerClosed delivers normally.
 	BreakerClosed BreakerState = iota
-	// BreakerOpen does not dial at all. The point is skipping the DNS lookup,
-	// TCP connect and TLS handshake for endpoints that are definitely down: at
-	// scale, dead endpoints are a large fraction of outbound work, and this is
-	// where the CPU goes if you skip it.
+	// BreakerOpen skips delivery until the cooldown expires, avoiding DNS,
+	// connection and TLS work for a failing endpoint.
 	BreakerOpen
 	// BreakerHalfOpen allows exactly one probe in flight.
 	BreakerHalfOpen

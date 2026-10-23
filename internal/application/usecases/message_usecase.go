@@ -8,6 +8,7 @@ import (
 	"github.com/plusiv/huxio/internal/domain/entities"
 	"github.com/plusiv/huxio/internal/domain/repositories"
 	"github.com/plusiv/huxio/internal/infrastructure/ids"
+	"github.com/plusiv/huxio/internal/utils"
 	"github.com/rotisserie/eris"
 )
 
@@ -68,7 +69,7 @@ func (uc *MessageUseCase) GetMessage(ctx context.Context, in GetMessageInput) (*
 		day := createdAt.Truncate(24 * time.Hour)
 		filters.CreatedAt = &repositories.Filter[time.Time]{
 			GTE: &day,
-			LT:  timePointer(day.AddDate(0, 0, 1)),
+			LT:  utils.Ptr(day.AddDate(0, 0, 1)),
 		}
 	}
 
@@ -110,5 +111,3 @@ func (uc *MessageUseCase) ListMessages(
 	}
 	return result, nil
 }
-
-func timePointer(t time.Time) *time.Time { return &t }

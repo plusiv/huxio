@@ -1,6 +1,5 @@
-// Package retry owns the retry schedule and the delay arithmetic. It is pure
-// and clock-injectable, because these are the rules most likely to be argued
-// about and they must be testable without waiting.
+// Package retry computes retry delays from attempt outcomes. Injected jitter
+// and explicit timestamps allow deterministic tests without waiting.
 package retry
 
 import (
@@ -10,9 +9,8 @@ import (
 	"time"
 )
 
-// DefaultSchedule is the delay before each retry, copied from the incumbent's
-// schedule so a migrating tenant's endpoints behave identically and nobody has
-// to re-tune anything on the receiving side.
+// DefaultSchedule is the delay before each retry. It preserves the schedule
+// expected by migrating tenants and their receivers.
 //
 // Eight attempts in total. The eighth and last fires 27h35m after the first,
 // with the seventh at 17h35m. Retention has to outlast that window or a

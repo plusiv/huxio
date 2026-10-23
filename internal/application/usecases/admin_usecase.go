@@ -18,9 +18,7 @@ type PoolAssignment struct {
 }
 
 // AdminUseCase serves the operational routes: forcing the stuck-task sweep,
-// reading the lease table, and moving endpoints between pools. These are the
-// levers an operator reaches for during an incident, so they are deliberately
-// boring and observable.
+// reading the lease table, and moving endpoints between pools.
 type AdminUseCase struct {
 	queueRepo    repositories.QueueRepository
 	leaseRepo    repositories.LeaseRepository
@@ -49,8 +47,6 @@ func NewAdminUseCase(
 }
 
 // RescueStuck returns tasks whose holder died back to the queue, on demand.
-// The maintenance loop does this on a timer; this is the button for when
-// somebody is watching.
 func (uc *AdminUseCase) RescueStuck(ctx context.Context) (int64, error) {
 	rescued, err := uc.queueRepo.RescueStuck(ctx)
 	if err != nil {

@@ -21,8 +21,7 @@ import (
 	"github.com/rotisserie/eris"
 )
 
-// templateFS carries the portal's markup into the binary: no build step, no
-// node, nothing to deploy alongside it.
+// templateFS embeds the portal templates in the binary.
 //
 //go:embed templates/*.html
 var templateFS embed.FS
@@ -676,9 +675,7 @@ func samplePayload() string {
 	return "{\n  \"hello\": \"world\",\n  \"sentFrom\": \"the portal\"\n}"
 }
 
-// streamAttempt is the event payload the tail's JavaScript reads. It is
-// deliberately the same shape the API's attempt listing returns, so the two
-// views cannot drift.
+// streamAttempt is the event payload consumed by the portal live tail.
 type streamAttempt struct {
 	ID                 string    `json:"id"`
 	Timestamp          time.Time `json:"timestamp"`

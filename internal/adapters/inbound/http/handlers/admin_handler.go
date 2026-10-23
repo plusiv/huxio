@@ -53,8 +53,7 @@ type reEnableRequest struct {
 	EndpointID string `json:"endpointId" validate:"required,max=256"`
 }
 
-// RescueStuck forces the stuck-task sweep, for when somebody is watching
-// rather than waiting for the maintenance timer.
+// RescueStuck runs the stuck-task sweep on demand.
 func (h *AdminHandler) RescueStuck(c *echo.Context) error {
 	if _, err := orgToken(c); err != nil {
 		return err

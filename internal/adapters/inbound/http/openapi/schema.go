@@ -1,7 +1,5 @@
-// Package openapi generates the API's OpenAPI document from the registered
-// routes and the handler payload types. The spec is derived, never
-// hand-written: a hand-written one drifts from the routes the moment anybody
-// adds a field.
+// Package openapi generates an OpenAPI document from registered routes and
+// handler payload types.
 package openapi
 
 import (
@@ -35,9 +33,7 @@ var (
 	rawJSONType = reflect.TypeOf(json.RawMessage{})
 )
 
-// SchemaFor reflects a Go type into a schema. Validator tags become
-// constraints, so the published contract matches what the binder actually
-// enforces rather than what somebody remembered to document.
+// SchemaFor reflects Go types and validation tags into schema constraints.
 func SchemaFor(t reflect.Type) *Schema {
 	if t == nil {
 		return &Schema{}

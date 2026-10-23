@@ -424,10 +424,8 @@ func TestPortalResendAndRecover(t *testing.T) {
 	}
 }
 
-// TestPortalSessionIsConfinedToItsApplication covers the worst bug this
-// project could ship: one tenant's customer reading another's deliveries.
-// The portal takes the application from the session token, so there is no
-// request a session can make that names another one.
+// TestPortalSessionIsConfinedToItsApplication verifies that endpoint ids and
+// query parameters cannot override the application in the session token.
 func TestPortalSessionIsConfinedToItsApplication(t *testing.T) {
 	t.Parallel()
 

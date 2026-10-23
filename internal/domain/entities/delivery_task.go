@@ -18,9 +18,8 @@ const (
 	TaskDeliver TaskKind = 1
 )
 
-// QueuePartitions is the fixed partition count the queue is split into. It is
-// deliberately far larger than any realistic worker count so
-// ceil(partitions/workers) is close to even for every N.
+// QueuePartitions is the fixed queue partition count. Every process must use
+// the same value because it determines each task's persisted partition key.
 const QueuePartitions = 256
 
 // DeliveryTask is one row of the work queue. Unlike every other entity, these

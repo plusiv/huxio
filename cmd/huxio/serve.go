@@ -431,11 +431,8 @@ func serve(ctx context.Context, cfg *configs.Config) error {
 	return nil
 }
 
-// migrateSchema brings the schema up to date before anything serves against
-// it. Every role does this on its own rather than leaving it to an operator,
-// so there is no window in which a node runs against a schema that is behind
-// the binary. Concurrent starts are safe: the runner holds an advisory lock
-// for the run.
+// migrateSchema applies pending migrations before serving. An advisory lock
+// serializes concurrent starts within the database.
 func migrateSchema(ctx context.Context, dsn string) error {
 	log := logger.FromContext(ctx)
 
@@ -457,9 +454,8 @@ func migrateSchema(ctx context.Context, dsn string) error {
 	return nil
 }
 
-// laneMetricSampleSize bounds the per-endpoint gauge. Labelling every endpoint
-// takes down Prometheus before it takes down the service, so only the busiest
-// lanes are exported.
+// laneMetricSampleSize limits per-endpoint metric cardinality by exporting
+// only the busiest lanes.
 const laneMetricSampleSize = 50
 
 // reportLaneMetrics evicts idle lanes and publishes the lane and breaker

@@ -447,8 +447,7 @@ func TestAPIPortalAccessMintsAScopedToken(t *testing.T) {
 		t.Errorf("a portal token minted another token: %d %s", escalated.Status, escalated.Body)
 	}
 
-	// An absurd lifetime is refused: a leaked portal token is the worst bug
-	// this project can ship, so the blast radius stays capped.
+	// Token lifetime is capped to limit access after a token leak.
 	if long := api.do(t, request{
 		Method: http.MethodPost,
 		Path:   "/api/v1/app/" + appID + "/portal-access",

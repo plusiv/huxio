@@ -52,10 +52,9 @@ type IngestResult struct {
 	Payload json.RawMessage
 }
 
-// IngestUseCase accepts messages. It is the only write path that must be fast:
-// it makes the message durable, queues exactly one fan-out task in the same
-// transaction, and returns. It never makes an outbound HTTP request and never
-// splits the two writes.
+// IngestUseCase stores each message and one fan-out task in the same
+// transaction. Outbound HTTP requests run in workers so endpoint latency
+// does not delay ingest.
 type IngestUseCase struct {
 	txManager        repositories.TxManager
 	messageRepo      repositories.MessageRepository
@@ -155,7 +154,7 @@ func (uc *IngestUseCase) Ingest(ctx context.Context, in IngestInput) (*IngestRes
 	// created on another node moments ago may not have reached us yet. We
 	// would drop a delivery after telling the sender 202. The fan-out is
 	// always queued, and the worker re-checks matching against a snapshot
-	// that is newer than this one; it drops an empty fan-out in microseconds.
+	// that is current enough to decide the fan-out.
 	var matched []*config.Endpoint
 	if snapshot := uc.snapshotProvider.Current(); snapshot != nil {
 		matched = snapshot.MatchingEndpoints(app.ID, in.EventType, in.Channels)
@@ -167,7 +166,7 @@ func (uc *IngestUseCase) Ingest(ctx context.Context, in IngestInput) (*IngestRes
 			return err
 		}
 		// One enqueue per message, whatever the endpoint count. The expansion
-		// happens in a worker, where latency does not matter.
+		// happens in a worker to keep endpoint count from slowing ingest.
 		return uc.queueRepo.Enqueue(txCtx, []repositories.EnqueueTask{{
 			PartitionKey: partitionKey,
 			Pool:         uc.cfg.Pool,

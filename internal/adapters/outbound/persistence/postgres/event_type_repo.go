@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/plusiv/huxio/internal/domain/entities"
 	"github.com/plusiv/huxio/internal/domain/repositories"
+	"github.com/plusiv/huxio/internal/utils"
 	"github.com/rotisserie/eris"
 )
 
@@ -72,7 +73,7 @@ func (r *EventTypeRepo) UpdateEventType(ctx context.Context, et *entities.EventT
 // historical messages reference it by name and the portal has to be able to
 // show what they were.
 func (r *EventTypeRepo) ArchiveEventType(ctx context.Context, orgID, name string) error {
-	return r.setDeletedAt(ctx, orgID, name, timePtr(time.Now().UTC()), "deleted_at IS NULL")
+	return r.setDeletedAt(ctx, orgID, name, utils.Ptr(time.Now().UTC()), "deleted_at IS NULL")
 }
 
 // UnarchiveEventType restores a retired event type.
@@ -169,5 +170,3 @@ func scanEventType(row pgx.Row) (*entities.EventType, error) {
 	et.Schemas = schemas
 	return &et, nil
 }
-
-func timePtr(t time.Time) *time.Time { return &t }

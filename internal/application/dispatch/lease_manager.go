@@ -81,8 +81,8 @@ func (m *LeaseManager) Run(ctx context.Context) error {
 	log := logger.FromContext(ctx).With().Str("pool", m.opts.Pool).Logger()
 	ctx = logger.Context(ctx, log)
 
-	// Claim once before returning, so the engine has partitions to work on
-	// immediately rather than after the first tick.
+	// Claim before starting the heartbeat timer so ownership is available
+	// without waiting for the first tick.
 	m.rebalance(ctx)
 
 	ticker := time.NewTicker(m.opts.Heartbeat)
@@ -128,8 +128,7 @@ func (m *LeaseManager) rebalance(ctx context.Context) {
 		log.Warn().Err(err).Msg("failed to count live workers")
 		return
 	}
-	// This worker may not have registered yet, and dividing by zero is worse
-	// than assuming we are alone.
+	// Before registration is visible, use one worker to avoid division by zero.
 	workers = max(workers, 1)
 
 	share := fairShare(m.opts.Partitions, workers)
@@ -190,8 +189,7 @@ func (m *LeaseManager) store(partitions []int16) {
 	m.ownedPartitions.Store(utils.Unique(partitions))
 }
 
-// fairShare is ceil(partitions / workers): with 256 partitions it is close to
-// even for every realistic worker count.
+// fairShare rounds partitions / workers up so every partition can be owned.
 func fairShare(partitions, workers int) int {
 	if workers <= 0 {
 		return partitions
