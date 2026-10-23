@@ -103,6 +103,10 @@ dev-down: ## Stop the local stack
 docker-build: ## Build the container image
 	docker build -t huxio:$(VERSION) .
 
+.PHONY: release-snapshot
+release-snapshot: ## Build the release artefacts locally without publishing (needs goreleaser)
+	goreleaser release --snapshot --clean --skip=publish
+
 .PHONY: openapi
 openapi: ## Write the generated OpenAPI document to openapi.json
 	go run ./cmd/huxio-dev openapi -o openapi.json

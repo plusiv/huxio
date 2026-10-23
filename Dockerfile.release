@@ -1,0 +1,22 @@
+# The image GoReleaser publishes. It compiles nothing: it copies the binary
+# already cross-compiled for the target platform, which is why a release builds
+# arm64 without compiling under emulation. GoReleaser lays the binaries out as
+# $TARGETPLATFORM/huxio in the build context, so one Dockerfile serves both
+# architectures.
+#
+# Dockerfile, next to this one, is the build-from-source path that compose and
+# `make docker-build` use.
+FROM alpine:3.21
+
+ARG TARGETPLATFORM
+
+# wget stays available for the compose healthcheck, which is the reason this is
+# alpine rather than a distroless base.
+RUN apk add --no-cache ca-certificates && adduser -D -u 10001 huxio
+
+COPY $TARGETPLATFORM/huxio /usr/local/bin/huxio
+
+USER huxio
+EXPOSE 8080
+ENTRYPOINT ["huxio"]
+CMD ["serve", "--role=all"]

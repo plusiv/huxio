@@ -1,0 +1,98 @@
+version: 2
+
+project_name: huxio
+
+before:
+  hooks:
+    - go mod download
+
+builds:
+  # Only cmd/huxio ships. cmd/huxio-dev holds the migration controls, the
+  # OpenAPI generator and the benchmark harness, none of which belong on a
+  # customer's PATH.
+  - id: huxio
+    main: ./cmd/huxio
+    binary: huxio
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    # Overrides the default, which also sets main.commit, main.date and
+    # main.builtBy. Those symbols do not exist here.
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: huxio
+    ids:
+      - huxio
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - tar.gz
+    files:
+      - LICENSE
+      - README.md
+      - .env.example
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: git
+  sort: asc
+  filters:
+    exclude:
+      - '^\[docs\]'
+      - '^\[comments\]'
+      - '^\[lint\]'
+      - "^Merge "
+
+dockers_v2:
+  # One multi-platform image and its manifest. `latest` follows every tag,
+  # prereleases included; guard it with `{{ if not .Prerelease }}` before
+  # cutting an rc.
+  - id: huxio
+    ids:
+      - huxio
+    dockerfile: Dockerfile.release
+    images:
+      - ghcr.io/plusiv/huxio
+    tags:
+      - "{{ .Version }}"
+      - "{{ .Major }}.{{ .Minor }}"
+      - latest
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    labels:
+      org.opencontainers.image.title: "{{ .ProjectName }}"
+      org.opencontainers.image.description: Self-hosted webhook delivery. One Go binary, Postgres, nothing else.
+      org.opencontainers.image.url: https://github.com/plusiv/huxio
+      # The label GitHub reads to link the package back to this repository.
+      org.opencontainers.image.source: https://github.com/plusiv/huxio
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+      org.opencontainers.image.created: "{{ .Date }}"
+      org.opencontainers.image.licenses: MIT
+
+release:
+  draft: false
+  prerelease: auto
+  footer: |
+    ## Install
+
+    ```bash
+    docker pull ghcr.io/plusiv/huxio:{{ .Version }}
+    ```
+
+    ```bash
+    go install github.com/plusiv/huxio/cmd/huxio@{{ .Tag }}
+    ```
+
+    Or take a tarball below and verify it against `checksums.txt`.
