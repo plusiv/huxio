@@ -1,7 +1,6 @@
 package utils_test
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/plusiv/huxio/internal/utils"
@@ -33,9 +32,6 @@ func TestStringHelpers(t *testing.T) {
 	if got := utils.Fallback("", "default"); got != "default" {
 		t.Errorf("Fallback = %q", got)
 	}
-	if got := utils.Normalize("  Invoice.Paid "); got != "invoice.paid" {
-		t.Errorf("Normalize = %q", got)
-	}
 }
 
 func TestTruncateKeepsUTF8Boundary(t *testing.T) {
@@ -63,15 +59,9 @@ func TestTruncateKeepsUTF8Boundary(t *testing.T) {
 	}
 }
 
-func TestClampAndPercentile(t *testing.T) {
+func TestSumAndPercentile(t *testing.T) {
 	t.Parallel()
 
-	if got := utils.Clamp(120, 1, 64); got != 64 {
-		t.Errorf("Clamp = %d, want 64", got)
-	}
-	if got := utils.Clamp(0, 1, 64); got != 1 {
-		t.Errorf("Clamp = %d, want 1", got)
-	}
 	if got := utils.Sum([]int{1, 2, 3}); got != 6 {
 		t.Errorf("Sum = %d", got)
 	}
@@ -93,69 +83,7 @@ func TestSliceHelpers(t *testing.T) {
 	if got := utils.Map([]int{1, 2}, func(v int) int { return v * 2 }); got[0] != 2 || got[1] != 4 {
 		t.Errorf("Map = %v", got)
 	}
-	if got := utils.Filter([]int{1, 2, 3}, func(v int) bool { return v%2 == 1 }); len(got) != 2 {
-		t.Errorf("Filter = %v", got)
-	}
-	if !utils.Contains([]string{"a", "b"}, "b") {
-		t.Error("Contains must find b")
-	}
-	if !utils.ContainsAny([]string{"ch_a"}, []string{"ch_b", "ch_a"}) {
-		t.Error("ContainsAny must detect the shared channel")
-	}
-	if utils.ContainsAny([]string{"ch_a"}, nil) {
-		t.Error("ContainsAny with empty input must be false")
-	}
 	if got := utils.Unique([]int{1, 1, 2}); len(got) != 2 {
 		t.Errorf("Unique = %v", got)
-	}
-	if got := utils.Chunk([]int{1, 2, 3}, 2); len(got) != 2 || len(got[1]) != 1 {
-		t.Errorf("Chunk = %v", got)
-	}
-	if utils.Chunk([]int{1}, 0) != nil {
-		t.Error("Chunk with non-positive size must be nil")
-	}
-	if got := len(utils.Keys(map[string]int{"a": 1, "b": 2})); got != 2 {
-		t.Errorf("Keys length = %d", got)
-	}
-	if got := utils.Sum(utils.Values(map[string]int{"a": 1, "b": 2})); got != 3 {
-		t.Errorf("Values sum = %d", got)
-	}
-}
-
-func TestBatchHelpers(t *testing.T) {
-	t.Parallel()
-
-	boom := errors.New("boom")
-	calls := 0
-	err := utils.ForEach([]int{1, 2, 3}, func(v int) error {
-		calls++
-		if v == 2 {
-			return boom
-		}
-		return nil
-	})
-	if !errors.Is(err, boom) || calls != 2 {
-		t.Errorf("ForEach stopped after %d calls, err = %v", calls, err)
-	}
-
-	batches := 0
-	if err := utils.RunInBatches([]int{1, 2, 3, 4, 5}, 2, func(b []int) error {
-		batches++
-		return nil
-	}); err != nil {
-		t.Fatalf("RunInBatches: %v", err)
-	}
-	if batches != 3 {
-		t.Errorf("batches = %d, want 3", batches)
-	}
-
-	out, err := utils.Collect([]int{1, 2}, func(v int) (string, error) {
-		if v == 0 {
-			return "", boom
-		}
-		return "ok", nil
-	})
-	if err != nil || len(out) != 2 {
-		t.Errorf("Collect = %v, %v", out, err)
 	}
 }

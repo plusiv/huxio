@@ -128,9 +128,6 @@ func (s *Signer) HeaderNames() (id, timestamp, signature string) {
 	return HeaderStandardID, HeaderStandardTimestamp, HeaderStandardSignature
 }
 
-// Scheme reports the configured header scheme.
-func (s *Signer) Scheme() HeaderScheme { return s.scheme }
-
 func signOne(signed []byte, key Key) (string, error) {
 	secret := normalizeSecret(key.Secret)
 

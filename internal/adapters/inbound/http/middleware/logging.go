@@ -1,3 +1,5 @@
+// Package middleware handles request identity, logging, metrics,
+// authentication, and idempotency.
 package middleware
 
 import (
@@ -11,15 +13,14 @@ import (
 )
 
 // RequestID reads or generates an X-Request-Id and injects it into the request
-// context, both as a typed value and as a persistent zerolog field, so every
-// downstream log entry carries it.
+// context as a persistent zerolog field, so downstream logs carry it.
 func RequestID() echo.MiddlewareFunc {
 	return middleware.RequestIDWithConfig(middleware.RequestIDConfig{
 		RequestIDHandler: func(c *echo.Context, requestID string) {
 			req := c.Request()
 			enriched := logger.FromContext(req.Context()).With().Str("request_id", requestID).Logger()
 			ctx := logger.Context(req.Context(), enriched)
-			c.SetRequest(req.WithContext(WithRequestID(ctx, requestID)))
+			c.SetRequest(req.WithContext(ctx))
 		},
 	})
 }

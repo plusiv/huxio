@@ -23,9 +23,6 @@ func Fallback(s, defaultValue string) string {
 	return s
 }
 
-// Normalize trims and lowercases s.
-func Normalize(s string) string { return strings.ToLower(strings.TrimSpace(s)) }
-
 // Truncate returns at most n bytes of s, cutting on a UTF-8 boundary.
 func Truncate(s string, n int) string {
 	if n <= 0 || len(s) <= n {

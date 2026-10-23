@@ -7,17 +7,6 @@ type Number interface {
 		~float32 | ~float64
 }
 
-// Clamp constrains v to the inclusive range [lo, hi].
-func Clamp[T Number](v, lo, hi T) T {
-	if v < lo {
-		return lo
-	}
-	if v > hi {
-		return hi
-	}
-	return v
-}
-
 // Sum adds every element of s.
 func Sum[T Number](s []T) T {
 	var total T

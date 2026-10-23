@@ -2,6 +2,7 @@ package dispatch
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -266,7 +267,7 @@ func (e *Engine) drain(log zerolog.Logger) error {
 }
 
 func (e *Engine) owns(partition int16) bool {
-	return utils.Contains(e.partitionSource.Partitions(), partition)
+	return slices.Contains(e.partitionSource.Partitions(), partition)
 }
 
 // claimAndDispatch locks one batch and hands each task to a worker goroutine,

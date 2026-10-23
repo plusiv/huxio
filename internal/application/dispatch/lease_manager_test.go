@@ -2,6 +2,7 @@ package dispatch_test
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"sync"
 	"testing"
@@ -9,7 +10,6 @@ import (
 
 	"github.com/plusiv/huxio/internal/application/dispatch"
 	"github.com/plusiv/huxio/internal/domain/entities"
-	"github.com/plusiv/huxio/internal/utils"
 	"github.com/rotisserie/eris"
 )
 
@@ -59,7 +59,7 @@ func (r *fakeLeaseRepo) CountLiveWorkers(_ context.Context, pool string, _ time.
 	}
 	count := 0
 	for _, pools := range r.workers {
-		if utils.Contains(pools, pool) {
+		if slices.Contains(pools, pool) {
 			count++
 		}
 	}
@@ -380,7 +380,7 @@ func TestLeaseManagerStopsWorkingPartitionsItLost(t *testing.T) {
 	repo.steal(1, "wkr_2")
 
 	waitFor(t, func() bool {
-		return !utils.Contains(manager.Owned(), 0) && !utils.Contains(manager.Owned(), 1)
+		return !slices.Contains(manager.Owned(), 0) && !slices.Contains(manager.Owned(), 1)
 	}, 2*time.Second, "kept working partitions it had lost")
 
 	cancel()
